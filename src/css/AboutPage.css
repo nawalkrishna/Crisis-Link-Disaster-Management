@@ -1,0 +1,19 @@
+.aboutContainer {
+    max-width: 700px;
+    margin: 80px auto 0 auto;
+    padding: 70px;
+    border-radius: 24px;
+    background-color: rgba(14, 0, 59, 0.695);
+    box-shadow: 0 2px 4px rgba(226, 226, 226, 0.1);
+    
+}
+  
+  h2 {
+    font-size: 2em;
+    color: #fff;
+  }
+  
+  p {
+    font-size: 1.2em;
+    color: #a8a5af;
+  }

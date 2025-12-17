@@ -1,0 +1,59 @@
+.container {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 400px;
+    margin: 10px auto;
+    padding: 40px;
+    border-radius: 24px;
+    background-color: rgba(14, 0, 59, 0.695);
+    box-shadow: 0 2px 4px rgba(226, 226, 226, 0.1);
+}
+
+h2 {
+    font-size: 2em;
+    color: #cec2deee;
+
+}
+
+label {
+    display: block;
+    margin-bottom: 10px;
+    font-size: 1.1em;
+}
+
+input {
+    width: 100%;
+    padding: 10px;
+    font-size: 1em;
+    margin-bottom: 15px;
+    border: 0px solid #ccc;
+    color: #cec2deee;
+    background-color: rgba(0, 2, 43, 0.704);
+    border-radius: 4px;
+}
+
+button {
+    padding: 10px 20px;
+    font-size: 1em;
+    background-color: #430076;
+    color: #cec2deee;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #1d0033;
+
+}
+
+.signup{
+    margin-top: 30px;
+
+}
+.signup p{
+    color: #cec2deee;
+
+}

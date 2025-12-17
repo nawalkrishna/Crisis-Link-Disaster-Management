@@ -1,0 +1,7 @@
+body {
+  background: url('../public/img1.png') no-repeat center center fixed;
+  background-size: cover;
+  height: 100vh;
+  color: #b5b9ffd6; /* This sets the color of text on the body */
+  /* Setting opacity for the background */
+}
