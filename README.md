@@ -1,70 +1,120 @@
-# Getting Started with Create React App
+# 🧭 Crisis Link — Disaster Management
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Crisis Link is a web-based disaster management application designed to support communication, coordination, and information sharing during emergencies and natural disasters.
 
-## Available Scripts
+---
 
-In the project directory, you can run:
+## 📌 Table of Contents
 
-### `npm start`
+- About  
+- Features  
+- Tech Stack  
+- Getting Started  
+- Available Scripts  
+- Project Structure  
+- API / Backend  
+- Contributing  
+- License  
+- Contact  
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+---
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## 🧾 About
 
-### `npm test`
+Crisis Link aims to provide a centralized platform for disaster-related information and response coordination.  
+The project focuses on improving accessibility, awareness, and responsiveness during crisis situations.
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+Project Status: Development / Academic Project
 
-### `npm run build`
+---
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## ⭐ Features
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+- Disaster-related information management  
+- User-friendly web interface  
+- Modular and scalable frontend design  
+- Responsive UI for multiple devices  
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+---
 
-### `npm run eject`
+## 🛠️ Tech Stack
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+Frontend:
+- React.js
+- JavaScript
+- HTML5
+- CSS3
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+Tools:
+- Node.js
+- npm
+- Git & GitHub
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+---
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+## 🚀 Getting Started
 
-## Learn More
+### Prerequisites
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+- Node.js (v14 or later recommended)
+- npm
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+### Installation
 
-### Code Splitting
+```bash
+git clone https://github.com/nawalkrishna/Crisis-Link-Disaster-Management.git
+cd Crisis-Link-Disaster-Management
+npm install
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+▶️ Available Scripts
+npm start
+Runs the app in development mode at http://localhost:3000
 
-### Analyzing the Bundle Size
+npm test
+Launches the test runner in watch mode.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+npm run build
+Builds the app for production into the build folder.
 
-### Making a Progressive Web App
+npm run eject
+One-way operation. Cannot be undone.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+🧱 Project Structure
 
-### Advanced Configuration
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+Crisis-Link-Disaster-Management/
+├── public/
+├── src/
+│   ├── components/
+│   ├── pages/
+│   ├── services/
+│   ├── utils/
+│   ├── App.js
+│   └── index.js
+├── package.json
+└── README.md
 
-### Deployment
+🔌 API / Backend
+Currently, this project focuses on the frontend.
+Backend or API details can be added here in the future.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+🤝 Contributing
+Fork the repository
 
-### `npm run build` fails to minify
+Create a new branch
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+Commit your changes
+
+Push to your fork
+
+Open a Pull Request
+
+📄 License
+This project is licensed under the MIT License.
+
+📬 Contact
+Author: Nawal Krishna
+GitHub: https://github.com/nawalkrishna
+Project Repository: https://github.com/nawalkrishna/Crisis-Link-Disaster-Management
+
+
