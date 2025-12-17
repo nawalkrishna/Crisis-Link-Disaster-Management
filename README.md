@@ -61,7 +61,6 @@ Tools:
 
 ### Installation
 
-```bash
 git clone https://github.com/nawalkrishna/Crisis-Link-Disaster-Management.git
 cd Crisis-Link-Disaster-Management
 npm install
