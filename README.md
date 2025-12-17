@@ -60,7 +60,7 @@ Tools:
 - npm
 
 ### Installation
-
+~~~
 git clone https://github.com/nawalkrishna/Crisis-Link-Disaster-Management.git
 cd Crisis-Link-Disaster-Management
 npm install
@@ -80,7 +80,6 @@ One-way operation. Cannot be undone.
 
 🧱 Project Structure
 
-
 Crisis-Link-Disaster-Management/
 ├── public/
 ├── src/
@@ -92,7 +91,7 @@ Crisis-Link-Disaster-Management/
 │   └── index.js
 ├── package.json
 └── README.md
-
+~~~
 🔌 API / Backend
 Currently, this project focuses on the frontend.
 Backend or API details can be added here in the future.
