@@ -1,0 +1,25 @@
+{
+  "name": "@crisislink/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "CrisisLink REST API (Express + TypeScript).",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
+    "build": "tsup",
+    "start": "node --env-file-if-exists=.env dist/index.js",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@crisislink/shared": "^0.1.0",
+    "cors": "^2.8.6",
+    "express": "^5.3.0",
+    "helmet": "^8.3.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "tsup": "^8.5.1",
+    "tsx": "^4.23.15"
+  }
+}

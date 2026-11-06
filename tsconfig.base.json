@@ -1,0 +1,28 @@
+{
+  // Shared compiler settings. Every app/package extends this file.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022"],
+
+    // Type-safety: be strict now so bugs surface at compile time, not in production.
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+
+    // Each file must compile on its own (required by Vite / esbuild / tsx).
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+
+    // tsc only type-checks; Vite and tsup produce the actual JavaScript.
+    "noEmit": true
+  }
+}

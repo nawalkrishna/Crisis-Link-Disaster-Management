@@ -1,118 +1,73 @@
-# 🧭 Crisis Link — Disaster Management
+# CrisisLink
 
-Crisis Link is a web-based disaster management application designed to support communication, coordination, and information sharing during emergencies and natural disasters.
+A disaster-relief coordination platform for Kerala: relief camps, evacuees, volunteers, camp needs
+and donations. Originally a 2024 BTech mini project, now being rebuilt phase by phase.
 
----
+## Quick start
 
-## 📌 Table of Contents
+Requires **Node.js 22.12+** (see `.nvmrc`).
 
-- About  
-- Features  
-- Tech Stack  
-- Getting Started  
-- Available Scripts  
-- Project Structure  
-- API / Backend  
-- Contributing  
-- License  
-- Contact  
+```bash
+npm install        # installs every workspace at once
+npm run dev        # API on http://localhost:4000, web on http://localhost:5173
+```
 
----
+Open http://localhost:5173. The badge top-right should say **API online**.
 
-## 🧾 About
+## Scripts (run from the repo root)
 
-Crisis Link aims to provide a centralized platform for disaster-related information and response coordination.  
-The project focuses on improving accessibility, awareness, and responsiveness during crisis situations.
+| Command                          | What it does                                              |
+| -------------------------------- | --------------------------------------------------------- |
+| `npm run dev`                    | Runs API and web together (`concurrently`)                |
+| `npm run build`                  | Production build of every workspace                       |
+| `npm run typecheck`              | `tsc` type-check of every workspace                       |
+| `npm run lint`                   | ESLint across the whole repo (`lint:fix` to auto-fix)     |
+| `npm run format`                 | Prettier formats every file (`format:check` only reports) |
+| `npm run check`                  | format check + lint + typecheck — run before committing   |
+| `npm run dev -w @crisislink/api` | Run a script in just one workspace                        |
 
-Project Status: Development / Academic Project
+## Project layout
 
----
+```
+crisislink/
+├── apps/
+│   ├── api/          Express 5 + TypeScript REST API (dev: tsx, build: tsup)
+│   └── web/          React 19 + Vite + Tailwind CSS v4
+├── packages/
+│   └── shared/       Types & constants imported by BOTH api and web
+├── tsconfig.base.json   strict TypeScript settings every workspace extends
+├── eslint.config.js     one lint config for the whole repo
+└── package.json         npm workspaces + root scripts
+```
 
-## ⭐ Features
+## Concepts introduced in Phase 0
 
-- Disaster-related information management  
-- User-friendly web interface  
-- Modular and scalable frontend design  
-- Responsive UI for multiple devices  
+- **Monorepo with npm workspaces** — several packages in one repo, one `npm install`, one lockfile.
+  `@crisislink/shared` is symlinked into `node_modules`, so `import { DISTRICTS } from
+'@crisislink/shared'` works in both apps.
+- **Shared types as a contract** — `HealthResponse` is defined once. If the API changes a field,
+  the web app stops compiling instead of breaking at runtime.
+- **Strict TypeScript** — `strict`, `noUncheckedIndexedAccess` etc. `tsc` only _checks_ types;
+  Vite (web) and tsup/esbuild (api) produce the JavaScript.
+- **Data-driven UI** — the 14 districts are one array, replacing ~40 copy-pasted district
+  components from the 2024 version.
+- **Dev proxy** — the browser calls `/api/...` on Vite, which forwards to the API, so local
+  development has no CORS issues.
+- **App vs server split** — `createApp()` builds Express without listening, so tests can use it.
+- **12-factor config** — settings come from environment variables (`apps/api/.env.example`).
+- **Security defaults** — `helmet` headers, CORS allow-list, JSON body size limit, no error
+  details leaked in production.
+- **Consistent code** — Prettier formats, ESLint finds bugs, EditorConfig + `.gitattributes` keep
+  line endings LF on Windows too.
 
----
+## Roadmap
 
-## 🛠️ Tech Stack
-
-Frontend:
-- React.js
-- JavaScript
-- HTML5
-- CSS3
-
-Tools:
-- Node.js
-- npm
-- Git & GitHub
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- Node.js (v14 or later recommended)
-- npm
-
-### Installation
-~~~
-git clone https://github.com/nawalkrishna/Crisis-Link-Disaster-Management.git
-cd Crisis-Link-Disaster-Management
-npm install
-
-▶️ Available Scripts
-npm start
-Runs the app in development mode at http://localhost:3000
-
-npm test
-Launches the test runner in watch mode.
-
-npm run build
-Builds the app for production into the build folder.
-
-npm run eject
-One-way operation. Cannot be undone.
-
-🧱 Project Structure
-
-Crisis-Link-Disaster-Management/
-├── public/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   ├── services/
-│   ├── utils/
-│   ├── App.js
-│   └── index.js
-├── package.json
-└── README.md
-~~~
-🔌 API / Backend
-Currently, this project focuses on the frontend.
-Backend or API details can be added here in the future.
-
-🤝 Contributing
-Fork the repository
-
-Create a new branch
-
-Commit your changes
-
-Push to your fork
-
-Open a Pull Request
-
-📄 License
-This project is licensed under the MIT License.
-
-📬 Contact
-Author: Nawal Krishna
-GitHub: https://github.com/nawalkrishna
-Project Repository: https://github.com/nawalkrishna/Crisis-Link-Disaster-Management
-
-
+- [x] **Phase 0** — Foundations: git, TypeScript monorepo, lint/format, API + web skeleton
+- [ ] **Phase 1** — PostgreSQL + Prisma, data model (District → Camp → Evacuee, Volunteer, Need,
+      Donation, Incident), Zod validation, REST endpoints
+- [ ] **Phase 2** — Authentication (hashed passwords) and role-based access control
+- [ ] **Phase 3** — Frontend rebuild: routing, TanStack Query, react-hook-form + Zod
+- [ ] **Phase 4** — Real-time updates (Socket.IO) and maps (Leaflet + PostGIS)
+- [ ] **Phase 5** — Offline-first PWA, SMS alerts
+- [ ] **Phase 6** — Tests (Vitest, Playwright), Docker, CI/CD, deployment, monitoring
+- [ ] **Phase 7** — AI report triage, Malayalam i18n, analytics
