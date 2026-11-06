@@ -8,6 +8,8 @@
  * All people and phone numbers below are fictional.
  */
 import { DISTRICTS } from '@crisislink/shared';
+import { hashPassword } from '../src/auth/password';
+import { config } from '../src/config';
 import { prisma } from '../src/db';
 
 async function seedDistricts() {
@@ -187,9 +189,111 @@ async function districtId(slug: string) {
   return (await prisma.district.findUnique({ where: { slug } }))?.id;
 }
 
+/**
+ * 3. Sample accounts, one per role, so you can try the permission rules locally.
+ *    Only when DEV_SEED_PASSWORD is set in apps/api/.env, and never in production.
+ *    Emails use the reserved `.test` domain, which can never be a real mailbox.
+ */
+async function seedUsers() {
+  const password = config.devSeedPassword;
+  if (config.isProduction || !password) {
+    console.log('Users: skipped (set DEV_SEED_PASSWORD in apps/api/.env to create sample users)');
+    return;
+  }
+  const passwordHash = await hashPassword(password);
+  const wayanad = await prisma.district.findUniqueOrThrow({ where: { slug: 'wayanad' } });
+  const idukki = await prisma.district.findUniqueOrThrow({ where: { slug: 'idukki' } });
+
+  const accounts = [
+    { email: 'admin@crisislink.test', fullName: 'Admin User', role: 'ADMIN', status: 'ACTIVE' },
+    {
+      email: 'coordinator@crisislink.test',
+      fullName: 'Anitha K (Coordinator)',
+      role: 'COORDINATOR',
+      status: 'ACTIVE',
+    },
+    {
+      email: 'volunteer@crisislink.test',
+      fullName: 'Asha Menon',
+      role: 'VOLUNTEER',
+      status: 'ACTIVE',
+      profile: { districtId: wayanad.id, skills: ['FIRST_AID', 'DRIVING'] as const },
+    },
+    {
+      email: 'pending@crisislink.test',
+      fullName: 'Rahul Nair',
+      role: 'VOLUNTEER',
+      status: 'PENDING',
+      profile: { districtId: idukki.id, skills: ['COOKING'] as const },
+    },
+  ] as const;
+
+  for (const { profile, ...account } of accounts.map((a) => ({ profile: undefined, ...a }))) {
+    const user = await prisma.user.upsert({
+      where: { email: account.email },
+      update: { passwordHash, role: account.role, status: account.status },
+      create: { ...account, phone: '9400000100', passwordHash },
+    });
+    if (profile) {
+      await prisma.volunteerProfile.upsert({
+        where: { userId: user.id },
+        update: {},
+        create: { userId: user.id, districtId: profile.districtId, skills: [...profile.skills] },
+      });
+    }
+  }
+
+  // The coordinator manages the Meppadi camp (if the sample camps exist).
+  const coordinator = await prisma.user.findUniqueOrThrow({
+    where: { email: 'coordinator@crisislink.test' },
+  });
+  const meppadi = await prisma.reliefCamp.findFirst({ where: { name: { contains: 'Meppadi' } } });
+  if (meppadi) {
+    await prisma.campCoordinator.upsert({
+      where: { userId_campId: { userId: coordinator.id, campId: meppadi.id } },
+      update: {},
+      create: { userId: coordinator.id, campId: meppadi.id },
+    });
+    if ((await prisma.volunteerTask.count()) === 0) {
+      await prisma.volunteerTask.createMany({
+        data: [
+          {
+            title: 'Unload water truck',
+            description: 'A truck with 400 bottles arrives at 4 pm. Needs 4 people.',
+            priority: 'HIGH',
+            campId: meppadi.id,
+            districtId: wayanad.id,
+            createdById: coordinator.id,
+          },
+          {
+            title: 'First-aid desk evening shift',
+            description: 'Staff the first-aid desk 6 pm - 10 pm.',
+            priority: 'MEDIUM',
+            requiredSkill: 'FIRST_AID',
+            campId: meppadi.id,
+            districtId: wayanad.id,
+            createdById: coordinator.id,
+          },
+          {
+            title: 'Drive medicines from Kalpetta',
+            description: 'Pick up a medicine box from the district hospital pharmacy.',
+            priority: 'CRITICAL',
+            requiredSkill: 'DRIVING',
+            campId: meppadi.id,
+            districtId: wayanad.id,
+            createdById: coordinator.id,
+          },
+        ],
+      });
+    }
+  }
+  console.log(`Users: ${accounts.map((a) => a.email).join(', ')} (password = DEV_SEED_PASSWORD)`);
+}
+
 try {
   await seedDistricts();
   await seedSampleData();
+  await seedUsers();
 } finally {
   await prisma.$disconnect();
 }

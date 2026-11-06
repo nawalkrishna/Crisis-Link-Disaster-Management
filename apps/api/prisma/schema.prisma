@@ -5,8 +5,7 @@
 // - rows get generated IDs, so two people called "Rahul" no longer overwrite each other
 // - relations (camp -> district, need -> camp, donation -> need) are enforced by the database
 //   with foreign keys, so you cannot reference a camp that doesn't exist
-//
-// Volunteers and their tasks arrive in Phase 2 together with user accounts.
+// - passwords are never stored: only an argon2id hash (the 2024 version stored them in plain text)
 
 generator client {
   provider     = "prisma-client"
@@ -21,11 +20,13 @@ datasource db {
 // ---------- Geography ----------
 
 model District {
-  id        Int              @id @default(autoincrement())
-  slug      String           @unique
-  name      String           @unique
-  camps     ReliefCamp[]
-  incidents IncidentReport[]
+  id         Int                @id @default(autoincrement())
+  slug       String             @unique
+  name       String             @unique
+  camps      ReliefCamp[]
+  incidents  IncidentReport[]
+  volunteers VolunteerProfile[]
+  tasks      VolunteerTask[]
 
   @@map("districts")
 }
@@ -53,9 +54,11 @@ model ReliefCamp {
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
-  evacuees  Evacuee[]
-  needs     CampNeed[]
-  donations Donation[]
+  evacuees     Evacuee[]
+  needs        CampNeed[]
+  donations    Donation[]
+  coordinators CampCoordinator[]
+  tasks        VolunteerTask[]
 
   // An index makes "all camps in district X" fast once there are thousands of rows.
   @@index([districtId])
@@ -200,4 +203,138 @@ model IncidentReport {
   @@index([status, severity])
   @@index([districtId])
   @@map("incident_reports")
+}
+
+// ---------- Accounts & access control ----------
+
+/// What a user is allowed to do. Checked in apps/api/src/auth/policies.ts.
+enum Role {
+  ADMIN // runs the platform: creates camps, approves volunteers, assigns coordinators
+  COORDINATOR // manages the camps they are assigned to
+  VOLUNTEER // claims and completes tasks
+}
+
+enum AccountStatus {
+  PENDING // registered, waiting for approval
+  ACTIVE
+  SUSPENDED // cannot log in; existing sessions stop working
+}
+
+model User {
+  id           String        @id @default(uuid(7)) @db.Uuid
+  /// Always stored lower-case so "Asha@X.com" and "asha@x.com" are the same account.
+  email        String        @unique
+  fullName     String        @map("full_name")
+  phone        String?
+  /// argon2id hash - includes its own random salt and parameters.
+  passwordHash String        @map("password_hash")
+  role         Role          @default(VOLUNTEER)
+  status       AccountStatus @default(PENDING)
+  lastLoginAt  DateTime?     @map("last_login_at")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  sessions         Session[]
+  volunteerProfile VolunteerProfile?
+  coordinatedCamps CampCoordinator[]
+  assignedTasks    VolunteerTask[]   @relation("TaskAssignee")
+  createdTasks     VolunteerTask[]   @relation("TaskCreator")
+
+  @@index([role, status])
+  @@map("users")
+}
+
+/// A logged-in browser. The cookie holds a random token; we store only its SHA-256 hash,
+/// so someone who reads the database still cannot impersonate users.
+model Session {
+  /// SHA-256 hash of the session token (hex).
+  id         String   @id
+  userId     String   @map("user_id") @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+  userAgent  String?  @map("user_agent")
+  ip         String?
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+enum VolunteerSkill {
+  FIRST_AID
+  MEDICAL
+  DRIVING
+  COOKING
+  SWIMMING_RESCUE
+  COUNSELLING
+  LOGISTICS
+  TRANSLATION
+  OTHER
+}
+
+/// Extra details for users who volunteer (one-to-one with User).
+model VolunteerProfile {
+  userId     String           @id @map("user_id") @db.Uuid
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  districtId Int              @map("district_id")
+  district   District         @relation(fields: [districtId], references: [id])
+  hometown   String?
+  skills     VolunteerSkill[]
+  available  Boolean          @default(true)
+
+  @@index([districtId, available])
+  @@map("volunteer_profiles")
+}
+
+/// Which coordinator manages which camp (many-to-many join table).
+model CampCoordinator {
+  userId     String     @map("user_id") @db.Uuid
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campId     String     @map("camp_id") @db.Uuid
+  camp       ReliefCamp @relation(fields: [campId], references: [id], onDelete: Cascade)
+  assignedAt DateTime   @default(now()) @map("assigned_at")
+
+  @@id([userId, campId])
+  @@index([campId])
+  @@map("camp_coordinators")
+}
+
+// ---------- Volunteer tasks ----------
+
+/// Allowed moves are enforced in apps/api/src/routes/tasks.ts (a small state machine):
+/// OPEN -> ASSIGNED -> IN_PROGRESS -> DONE, and most states -> CANCELLED.
+enum TaskStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+model VolunteerTask {
+  id            String          @id @default(uuid(7)) @db.Uuid
+  title         String
+  description   String
+  priority      Priority        @default(MEDIUM)
+  status        TaskStatus      @default(OPEN)
+  requiredSkill VolunteerSkill? @map("required_skill")
+  /// Optional: field tasks (e.g. a rescue) may not belong to a camp.
+  campId        String?         @map("camp_id") @db.Uuid
+  camp          ReliefCamp?     @relation(fields: [campId], references: [id], onDelete: SetNull)
+  districtId    Int             @map("district_id")
+  district      District        @relation(fields: [districtId], references: [id])
+  assigneeId    String?         @map("assignee_id") @db.Uuid
+  assignee      User?           @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  createdById   String          @map("created_by_id") @db.Uuid
+  createdBy     User            @relation("TaskCreator", fields: [createdById], references: [id])
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+  completedAt   DateTime?       @map("completed_at")
+
+  @@index([status, districtId])
+  @@index([assigneeId])
+  @@index([campId])
+  @@map("volunteer_tasks")
 }

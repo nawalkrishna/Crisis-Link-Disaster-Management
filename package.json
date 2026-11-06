@@ -1,6 +1,6 @@
 {
   "name": "crisislink",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Disaster-relief coordination platform for Kerala: camps, evacuees, volunteers, needs and donations.",
@@ -23,7 +23,8 @@
     "db:migrate": "npm run db:migrate -w @crisislink/api",
     "db:seed": "npm run db:seed -w @crisislink/api",
     "db:reset": "npm run db:reset -w @crisislink/api",
-    "db:studio": "npm run db:studio -w @crisislink/api"
+    "db:studio": "npm run db:studio -w @crisislink/api",
+    "make-admin": "npm run make-admin -w @crisislink/api --"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

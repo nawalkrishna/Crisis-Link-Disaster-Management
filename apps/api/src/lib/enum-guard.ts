@@ -19,4 +19,8 @@ export type EnumsInSync = [
   Assert<Equal<Db.DonationStatus, Shared.DonationStatus>>,
   Assert<Equal<Db.IncidentType, Shared.IncidentType>>,
   Assert<Equal<Db.IncidentStatus, Shared.IncidentStatus>>,
+  Assert<Equal<Db.Role, Shared.Role>>,
+  Assert<Equal<Db.AccountStatus, Shared.AccountStatus>>,
+  Assert<Equal<Db.VolunteerSkill, Shared.VolunteerSkill>>,
+  Assert<Equal<Db.TaskStatus, Shared.TaskStatus>>,
 ];

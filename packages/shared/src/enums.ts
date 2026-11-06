@@ -36,3 +36,25 @@ export type NeedStatus = (typeof NEED_STATUSES)[number];
 export type DonationStatus = (typeof DONATION_STATUSES)[number];
 export type IncidentType = (typeof INCIDENT_TYPES)[number];
 export type IncidentStatus = (typeof INCIDENT_STATUSES)[number];
+
+// ---------- Accounts & tasks (Phase 2) ----------
+
+export const ROLES = ['ADMIN', 'COORDINATOR', 'VOLUNTEER'] as const;
+export const ACCOUNT_STATUSES = ['PENDING', 'ACTIVE', 'SUSPENDED'] as const;
+export const VOLUNTEER_SKILLS = [
+  'FIRST_AID',
+  'MEDICAL',
+  'DRIVING',
+  'COOKING',
+  'SWIMMING_RESCUE',
+  'COUNSELLING',
+  'LOGISTICS',
+  'TRANSLATION',
+  'OTHER',
+] as const;
+export const TASK_STATUSES = ['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'DONE', 'CANCELLED'] as const;
+
+export type Role = (typeof ROLES)[number];
+export type AccountStatus = (typeof ACCOUNT_STATUSES)[number];
+export type VolunteerSkill = (typeof VOLUNTEER_SKILLS)[number];
+export type TaskStatus = (typeof TASK_STATUSES)[number];

@@ -22,11 +22,18 @@ Requires **Node.js 22.12+** (see `.nvmrc`) and **PostgreSQL 15+**.
    cp apps/api/.env.example apps/api/.env   # then put your password in DATABASE_URL
    npm install        # installs every workspace and generates the Prisma client
    npm run db:migrate # creates the tables
-   npm run db:seed    # districts + sample camps, needs, incidents
+   npm run db:seed    # districts + sample camps, needs, incidents, tasks and users
    npm run dev        # API on http://localhost:4000, web on http://localhost:5173
    ```
 
 Open http://localhost:5173. The badge top-right should say **API online**.
+
+**Sample accounts** (development only): when `DEV_SEED_PASSWORD` is set in `apps/api/.env`,
+the seed creates `admin@`, `coordinator@`, `volunteer@` and `pending@crisislink.test`, all with
+that password. The coordinator manages the Meppadi camp.
+
+**First real admin** (any environment): register through `POST /api/auth/register`, then on the
+server run `npm run make-admin -- you@example.com`.
 
 ## Scripts (run from the repo root)
 
@@ -42,32 +49,49 @@ Open http://localhost:5173. The badge top-right should say **API online**.
 | `npm run db:seed`                | Insert districts and (in development) sample data         |
 | `npm run db:reset`               | Drop everything, re-run all migrations (dev only!)        |
 | `npm run db:studio`              | Prisma Studio: browse and edit data in the browser        |
+| `npm run make-admin -- <email>`  | Promote a registered user to an active admin              |
 | `npm run dev -w @crisislink/api` | Run a script in just one workspace                        |
 
-## API (Phase 1)
+## API
 
 All endpoints are under `/api`. Lists accept `limit` and `offset` and return
 `{ items, total, limit, offset }`. Errors always look like
 `{ "error": { "code": "...", "message": "...", "details": { "field": ["problem"] } } }`.
+Request bodies must be JSON. Logging in sets an httpOnly `cl_session` cookie.
 
-| Method & path                        | Purpose                                                 |
-| ------------------------------------ | ------------------------------------------------------- |
-| `GET /health`                        | API + database status                                   |
-| `GET /stats`                         | Dashboard numbers (camps, evacuees, needs, incidents)   |
-| `GET /districts`, `/districts/:slug` | Per-district camp, evacuee and incident counts          |
-| `GET, POST /camps`                   | List (`district`, `status`, `q`) / create relief camps  |
-| `GET, PATCH /camps/:id`              | One camp with live occupancy / update it                |
-| `GET, POST /camps/:id/evacuees`      | People in a camp / check someone in (capacity enforced) |
-| `PATCH /evacuees/:id`                | Update details or `{ "checkedOut": true }`              |
-| `GET /needs`                         | Open needs across camps, most urgent first              |
-| `GET, POST /camps/:id/needs`         | A camp's needs / add one                                |
-| `PATCH /needs/:id`                   | Update a need                                           |
-| `GET, POST /donations`               | List / pledge a donation (optionally for a `needId`)    |
-| `PATCH /donations/:id`               | `{ "status": "RECEIVED" }` updates the need's total     |
-| `GET, POST /incidents`               | List (`district`, `status`, `severity`) / report one    |
-| `GET, PATCH /incidents/:id`          | One incident / verify, resolve or dismiss it            |
+**Who** column: _public_ = no login, _user_ = any logged-in user, _staff_ = active admin or
+coordinator, _camp staff_ = admin or a coordinator of that camp, _admin_ = active admin.
 
-> Write endpoints are open to anyone until Phase 2 adds login and roles.
+| Method & path                               | Who              | Purpose                                                 |
+| ------------------------------------------- | ---------------- | ------------------------------------------------------- |
+| `GET /health`                               | public           | API + database status                                   |
+| `GET /stats`                                | public           | Dashboard numbers (camps, evacuees, needs, incidents)   |
+| `GET /districts`, `/districts/:slug`        | public           | Per-district camp, evacuee and incident counts          |
+| `POST /auth/register`                       | public           | Volunteer sign-up (starts PENDING)                      |
+| `POST /auth/login`, `/auth/logout`          | public           | Start / end a session (failed logins are rate-limited)  |
+| `GET, PATCH /auth/me`                       | user             | Own account and volunteer profile                       |
+| `POST /auth/change-password`                | user             | Also logs out all other devices                         |
+| `GET /users`, `PATCH /users/:id`            | admin            | List accounts / approve, suspend, change role           |
+| `PUT /users/:id/camps`                      | admin            | Set which camps a coordinator manages                   |
+| `GET /volunteers`                           | staff            | Active volunteers (`district`, `skill`, `available`)    |
+| `POST /volunteers/:id/approve`              | staff            | Approve a pending volunteer                             |
+| `GET /camps`, `/camps/:id`                  | public           | Camps with live occupancy                               |
+| `POST /camps`                               | admin            | Open a camp                                             |
+| `PATCH /camps/:id`                          | camp staff       | Update a camp                                           |
+| `GET, POST /camps/:id/evacuees`             | camp staff       | People in a camp / check someone in (capacity enforced) |
+| `PATCH /evacuees/:id`                       | camp staff       | Update details or `{ "checkedOut": true }`              |
+| `GET /needs`, `/camps/:id/needs`            | public           | Open needs, most urgent first                           |
+| `POST /camps/:id/needs`, `PATCH /needs/:id` | camp staff       | Add / update a need                                     |
+| `POST /donations`                           | public           | Pledge a donation (optionally for a `needId`)           |
+| `GET /donations`                            | staff            | Coordinators see only their camps' donations            |
+| `PATCH /donations/:id`                      | camp staff       | `{ "status": "RECEIVED" }` updates the need's total     |
+| `GET /incidents`, `/incidents/:id`          | public           | Reporter name/phone only shown to staff                 |
+| `POST /incidents`                           | public           | Report an incident (rate-limited)                       |
+| `PATCH /incidents/:id`                      | staff            | Verify, resolve or dismiss                              |
+| `GET /tasks`                                | user             | Volunteers: open + own tasks; staff: all (`mine=true`)  |
+| `POST /tasks`                               | staff            | Coordinators for their camps; admins also field tasks   |
+| `POST /tasks/:id/claim`                     | volunteer        | Active volunteer takes an open task (skill checked)     |
+| `PATCH /tasks/:id`                          | assignee / staff | Move through the task state machine, edit, assign       |
 
 ## Project layout
 
@@ -76,7 +100,7 @@ crisislink/
 ├── apps/
 │   ├── api/          Express 5 + TypeScript REST API (dev: node --watch + tsx, build: tsup)
 │   │   ├── prisma/       schema.prisma, migrations/, seed.ts
-│   │   └── src/          app.ts, routes/, lib/ (errors, validation), db.ts
+│   │   └── src/          app.ts, routes/, auth/ (sessions, policies), lib/, scripts/, db.ts
 │   └── web/          React 19 + Vite + Tailwind CSS v4
 ├── packages/
 │   └── shared/       Types & constants imported by BOTH api and web
@@ -131,12 +155,40 @@ crisislink/
 - **Fail-fast config** — environment variables are validated at startup.
 - **Idempotent seeding** — `upsert` makes the seed safe to run repeatedly.
 
+## Concepts introduced in Phase 2
+
+- **Authentication vs authorisation** — login proves _who_ you are; `apps/api/src/auth/policies.ts`
+  decides _what_ you may do, all in one reviewable file.
+- **Password hashing** — argon2id (slow, salted, memory-hard). The 2024 version stored plain-text
+  passwords in Firestore and compared them in the browser; now the raw password never touches the
+  database.
+- **Server-side sessions over JWT** — a random 256-bit token in an httpOnly cookie, stored only as
+  a SHA-256 hash. Logout, suspension and password changes take effect instantly by deleting rows.
+- **Cookie security** — `HttpOnly` (no JavaScript access → XSS can't steal it), `SameSite=Lax`,
+  `Secure` in production, sliding expiry.
+- **CSRF defence in depth** — SameSite cookie + `Origin` allow-list + JSON-only bodies.
+- **RBAC + resource-based access** — roles (admin / coordinator / volunteer) _and_ ownership
+  ("coordinators manage only their assigned camps").
+- **Least privilege & data minimisation** — evacuee records, donor phones and incident reporter
+  details are visible only to staff who need them; responses use explicit field allow-lists
+  (`select`) so the password hash can never leak.
+- **No account enumeration** — identical error and similar timing for "no such email" and
+  "wrong password".
+- **Rate limiting** — failed logins, sign-ups and public submissions are throttled per IP.
+- **Session fixation** — a fresh token is issued at every login.
+- **State machines** — task status transitions are declared as data and enforced on the server.
+- **Optimistic concurrency** — `UPDATE ... WHERE status = <what we read>` makes simultaneous
+  claims or edits fail cleanly with 409 instead of silently overwriting each other.
+- **Declaration merging** — `req.user` is added to Express's `Request` type.
+- **Bootstrap problem** — the first admin is created with a server-side script, not an API.
+
 ## Roadmap
 
 - [x] **Phase 0** — Foundations: git, TypeScript monorepo, lint/format, API + web skeleton
 - [x] **Phase 1** — PostgreSQL + Prisma, data model (District → Camp → Evacuee, Need, Donation,
       Incident), Zod validation, REST endpoints (volunteers move to Phase 2 with accounts)
-- [ ] **Phase 2** — Authentication (hashed passwords) and role-based access control
+- [x] **Phase 2** — Authentication (argon2id, sessions), roles and permissions, volunteers and
+      tasks, CSRF protection, rate limiting
 - [ ] **Phase 3** — Frontend rebuild: routing, TanStack Query, react-hook-form + Zod
 - [ ] **Phase 4** — Real-time updates (Socket.IO) and maps (Leaflet + PostGIS)
 - [ ] **Phase 5** — Offline-first PWA, SMS alerts

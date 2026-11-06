@@ -7,7 +7,9 @@ import {
 } from '@crisislink/shared';
 import { prisma } from '../db';
 import type { Prisma } from '../generated/prisma/client';
-import { conflict, notFound, parse } from '../lib/http';
+import { assertCampAccess, isActive, requireStaff } from '../auth/policies';
+import { conflict, forbidden, notFound, parse } from '../lib/http';
+import { publicSubmitLimiter } from '../lib/security';
 
 export const donationsRouter = Router();
 
@@ -16,11 +18,14 @@ const donationInclude = {
   need: { select: { id: true, item: true, quantityNeeded: true, quantityFulfilled: true } },
 } satisfies Prisma.DonationInclude;
 
-donationsRouter.get('/donations', async (req, res) => {
+/** Donor names and phone numbers are personal data: staff only, and coordinators see only their camps. */
+donationsRouter.get('/donations', requireStaff, async (req, res) => {
   const { limit, offset, status, campId } = parse(listDonationsQuerySchema, req.query);
+  const user = req.user!;
+  if (campId) assertCampAccess(user, campId);
   const where: Prisma.DonationWhereInput = {
     ...(status && { status }),
-    ...(campId && { campId }),
+    ...(campId ? { campId } : user.role !== 'ADMIN' && { campId: { in: user.campIds } }),
   };
   const [items, total] = await prisma.$transaction([
     prisma.donation.findMany({
@@ -35,8 +40,8 @@ donationsRouter.get('/donations', async (req, res) => {
   res.json({ items, total, limit, offset });
 });
 
-/** A donor pledges items, optionally for a specific camp need. */
-donationsRouter.post('/donations', async (req, res) => {
+/** Anyone (no login) can pledge items, optionally for a specific camp need. Rate-limited. */
+donationsRouter.post('/donations', publicSubmitLimiter, async (req, res) => {
   const { needId, campId, ...data } = parse(createDonationSchema, req.body);
 
   let resolvedCampId = campId;
@@ -65,6 +70,12 @@ donationsRouter.post('/donations', async (req, res) => {
 donationsRouter.patch('/donations/:id', async (req, res) => {
   const { id } = parse(idParamSchema, req.params);
   const { status } = parse(updateDonationSchema, req.body);
+
+  const target = await prisma.donation.findUnique({ where: { id }, select: { campId: true } });
+  if (!target) throw notFound('Donation');
+  // General donations (no camp) are handled by admins; camp donations by that camp's staff.
+  if (target.campId) assertCampAccess(req.user, target.campId);
+  else if (!(isActive(req.user) && req.user.role === 'ADMIN')) throw forbidden();
 
   const donation = await prisma.$transaction(async (tx) => {
     const { count } = await tx.donation.updateMany({

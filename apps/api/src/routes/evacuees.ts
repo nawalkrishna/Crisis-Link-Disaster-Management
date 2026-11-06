@@ -7,12 +7,18 @@ import {
 } from '@crisislink/shared';
 import { prisma } from '../db';
 import type { Prisma } from '../generated/prisma/client';
+import { assertCampAccess } from '../auth/policies';
 import { conflict, notFound, parse } from '../lib/http';
 
+/**
+ * Evacuee records are PERSONAL DATA (names, ages, medical notes) about people in a crisis.
+ * Only the camp's own coordinators and admins can see or change them - never the public.
+ */
 export const evacueesRouter = Router();
 
 evacueesRouter.get('/camps/:id/evacuees', async (req, res) => {
   const { id: campId } = parse(idParamSchema, req.params);
+  assertCampAccess(req.user, campId);
   const { limit, offset, includeCheckedOut, q } = parse(listEvacueesQuerySchema, req.query);
 
   const where: Prisma.EvacueeWhereInput = {
@@ -38,6 +44,7 @@ evacueesRouter.get('/camps/:id/evacuees', async (req, res) => {
  */
 evacueesRouter.post('/camps/:id/evacuees', async (req, res) => {
   const { id: campId } = parse(idParamSchema, req.params);
+  assertCampAccess(req.user, campId);
   const data = parse(createEvacueeSchema, req.body);
 
   const evacuee = await prisma.$transaction(async (tx) => {
@@ -66,6 +73,7 @@ evacueesRouter.patch('/evacuees/:id', async (req, res) => {
   const evacuee = await prisma.$transaction(async (tx) => {
     const existing = await tx.evacuee.findUnique({ where: { id } });
     if (!existing) throw notFound('Evacuee');
+    assertCampAccess(req.user, existing.campId);
 
     const checkingOut = checkedOut === true && existing.checkedOutAt === null;
     const updated = await tx.evacuee.update({

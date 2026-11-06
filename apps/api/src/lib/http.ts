@@ -18,6 +18,12 @@ export class HttpError extends Error {
 
 export const notFound = (what: string) => new HttpError(404, 'NOT_FOUND', `${what} not found`);
 export const conflict = (code: string, message: string) => new HttpError(409, code, message);
+/** 401 = "we don't know who you are" -> log in. */
+export const unauthorized = (message = 'Please log in') =>
+  new HttpError(401, 'UNAUTHENTICATED', message);
+/** 403 = "we know who you are, and you may not do this". */
+export const forbidden = (message = 'You do not have permission to do this') =>
+  new HttpError(403, 'FORBIDDEN', message);
 
 /**
  * Validate untrusted input (req.body / req.query / req.params) against a Zod schema.

@@ -3,7 +3,7 @@
  * so if one side changes a field the other side fails to compile.
  * Dates travel over JSON as ISO-8601 strings.
  */
-import type { CampStatus, Priority } from './enums';
+import type { AccountStatus, CampStatus, Priority, Role, VolunteerSkill } from './enums';
 
 export interface HealthResponse {
   status: 'ok' | 'degraded';
@@ -65,4 +65,24 @@ export interface StatsResponse {
   activeIncidents: number;
   incidentsBySeverity: Record<Priority, number>;
   donationsReceived: number;
+}
+
+// ---------- Accounts (Phase 2) ----------
+
+/** The logged-in user as returned by /api/auth/me, /login and /register. Never includes the hash. */
+export interface CurrentUser {
+  id: string;
+  email: string;
+  fullName: string;
+  phone: string | null;
+  role: Role;
+  status: AccountStatus;
+  /** Camps this user coordinates (empty for volunteers). */
+  campIds: string[];
+  volunteer: {
+    district: { slug: string; name: string };
+    hometown: string | null;
+    skills: VolunteerSkill[];
+    available: boolean;
+  } | null;
 }

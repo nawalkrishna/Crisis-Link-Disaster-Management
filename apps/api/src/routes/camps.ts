@@ -9,6 +9,7 @@ import {
 } from '@crisislink/shared';
 import { prisma } from '../db';
 import type { Prisma } from '../generated/prisma/client';
+import { assertCampAccess, requireAdmin } from '../auth/policies';
 import { notFound, parse } from '../lib/http';
 
 export const campsRouter = Router();
@@ -75,7 +76,8 @@ campsRouter.get('/camps', async (req, res) => {
   res.json(body);
 });
 
-campsRouter.post('/camps', async (req, res) => {
+// Only admins open new camps.
+campsRouter.post('/camps', requireAdmin, async (req, res) => {
   const { district, ...data } = parse(createCampSchema, req.body);
   const camp = await prisma.reliefCamp.create({
     // `connect` links to the existing district row by its unique slug.
@@ -94,6 +96,7 @@ campsRouter.get('/camps/:id', async (req, res) => {
 
 campsRouter.patch('/camps/:id', async (req, res) => {
   const { id } = parse(idParamSchema, req.params);
+  assertCampAccess(req.user, id);
   const { district, ...data } = parse(updateCampSchema, req.body);
   const camp = await prisma.reliefCamp.update({
     where: { id },

@@ -7,6 +7,7 @@ import {
 } from '@crisislink/shared';
 import { prisma } from '../db';
 import type { Prisma } from '../generated/prisma/client';
+import { assertCampAccess } from '../auth/policies';
 import { conflict, notFound, parse } from '../lib/http';
 
 export const needsRouter = Router();
@@ -52,6 +53,7 @@ needsRouter.get('/camps/:id/needs', async (req, res) => {
 
 needsRouter.post('/camps/:id/needs', async (req, res) => {
   const { id: campId } = parse(idParamSchema, req.params);
+  assertCampAccess(req.user, campId);
   const data = parse(createNeedSchema, req.body);
   const camp = await prisma.reliefCamp.findUnique({
     where: { id: campId },
@@ -66,6 +68,9 @@ needsRouter.post('/camps/:id/needs', async (req, res) => {
 needsRouter.patch('/needs/:id', async (req, res) => {
   const { id } = parse(idParamSchema, req.params);
   const data = parse(updateNeedSchema, req.body);
+  const existing = await prisma.campNeed.findUnique({ where: { id }, select: { campId: true } });
+  if (!existing) throw notFound('Need');
+  assertCampAccess(req.user, existing.campId);
   const need = await prisma.campNeed.update({ where: { id }, data, include: needInclude });
   res.json(need);
 });
