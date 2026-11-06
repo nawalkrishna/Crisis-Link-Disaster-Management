@@ -1,6 +1,7 @@
 import { Link } from 'react-router';
 import { AlertTriangle, HandHeart, HeartPulse, House, Package, Siren } from 'lucide-react';
 import { CampCard, IncidentCard, NeedRow, StatTile } from '../../components/domain';
+import { LiveMapSection } from '../../components/LiveMapSection';
 import { ButtonLink, Card, EmptyState, ErrorState, Spinner } from '../../components/ui';
 import { formatNumber, pluralize } from '../../lib/format';
 import { useCamps, useDistricts, useIncidents, useNeeds, useStats } from '../../lib/queries';
@@ -76,6 +77,8 @@ export default function HomePage() {
           </div>
         )}
       </section>
+
+      <LiveMapSection />
 
       <div className="grid gap-8 lg:grid-cols-5">
         <section className="lg:col-span-3" aria-labelledby="needs-heading">

@@ -62,6 +62,8 @@ model ReliefCamp {
 
   // An index makes "all camps in district X" fast once there are thousands of rows.
   @@index([districtId])
+  // Lets "camps near me" narrow down by a lat/lng range before computing exact distances.
+  @@index([latitude, longitude])
   @@map("relief_camps")
 }
 

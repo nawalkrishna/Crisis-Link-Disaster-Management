@@ -11,6 +11,7 @@ import { prisma } from '../db';
 import type { Prisma } from '../generated/prisma/client';
 import { assertCampAccess, requireAdmin } from '../auth/policies';
 import { notFound, parse } from '../lib/http';
+import { publish } from '../realtime';
 
 export const campsRouter = Router();
 
@@ -18,7 +19,7 @@ export const campsRouter = Router();
  * What we load for every camp. `_count` with a `where` lets the database count
  * current evacuees and open needs in the same query - no N+1 queries.
  */
-const campInclude = {
+export const campInclude = {
   district: { select: { slug: true, name: true } },
   _count: {
     select: {
@@ -84,6 +85,7 @@ campsRouter.post('/camps', requireAdmin, async (req, res) => {
     data: { ...data, district: { connect: { slug: district } } },
     include: campInclude,
   });
+  publish(req, { type: 'camp.changed', campId: camp.id });
   res.status(201).json(toCampSummary(camp));
 });
 
@@ -103,5 +105,6 @@ campsRouter.patch('/camps/:id', async (req, res) => {
     data: { ...data, ...(district && { district: { connect: { slug: district } } }) },
     include: campInclude,
   });
+  publish(req, { type: 'camp.changed', campId: id });
   res.json(toCampSummary(camp));
 });

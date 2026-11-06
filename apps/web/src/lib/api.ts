@@ -29,7 +29,16 @@ interface RequestOptions {
 }
 
 /** In production the API may live on another origin: set VITE_API_URL at build time. */
-const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
+export const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
+
+/**
+ * Other modules can add headers to every request (live.ts adds X-Socket-Id). Registering a
+ * function instead of importing live.ts here avoids an import cycle (live.ts imports api.ts).
+ */
+let extraHeaders: () => Record<string, string> = () => ({});
+export function setExtraHeaders(fn: () => Record<string, string>) {
+  extraHeaders = fn;
+}
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, query, signal } = options;
@@ -45,7 +54,10 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
     response = await fetch(url, {
       method,
       credentials: 'include',
-      headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+      headers: {
+        ...(body !== undefined && { 'content-type': 'application/json' }),
+        ...(method !== 'GET' && extraHeaders()), // only writes need it; keeps GETs preflight-free
+      },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal,
     });

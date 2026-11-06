@@ -2,6 +2,7 @@ import { Suspense, useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router';
 import { AlertTriangle, LogOut, Menu, UserRound, X } from 'lucide-react';
 import { isAdmin, isStaff, useCurrentUser, useLogout } from '../lib/auth';
+import { useLiveUpdates } from '../lib/live';
 import { ApiStatus } from './ApiStatus';
 import { buttonClass, cn } from './styles';
 import { PageLoader } from './ui';
@@ -32,6 +33,7 @@ export function Layout() {
   const logout = useLogout();
   const navigate = useNavigate();
   const navItems = useNavItems();
+  useLiveUpdates(); // keep every page in sync with changes made by others
   const [menuOpen, setMenuOpen] = useState(false);
   const close = () => setMenuOpen(false);
 

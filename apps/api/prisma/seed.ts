@@ -290,9 +290,96 @@ async function seedUsers() {
   console.log(`Users: ${accounts.map((a) => a.email).join(', ')} (password = DEV_SEED_PASSWORD)`);
 }
 
+/**
+ * 4. Map demo data (Phase 4): coordinates for the sample camps/incidents plus a few more camps
+ *    across Kerala, so the map isn't empty. Safe to re-run: only fills in what's missing,
+ *    which also upgrades databases seeded before Phase 4.
+ */
+const SAMPLE_CAMP_LOCATIONS: Record<string, [number, number]> = {
+  'GHSS Meppadi Relief Camp': [11.5551, 76.1347],
+  'St. Joseph’s Parish Hall': [9.7516, 77.1166],
+  'Kuttanad Community Hall': [9.4296, 76.4648],
+};
+const SAMPLE_INCIDENT_LOCATIONS: Record<string, [number, number]> = {
+  'Mundakkai, Meppadi': [11.4853, 76.1647],
+  'Ramankary, Kuttanad': [9.4335, 76.4721],
+  'Kuttikkanam - Kattappana road': [9.5833, 76.9667],
+};
+const EXTRA_CAMPS = [
+  {
+    name: 'Govt. LP School Aluva',
+    address: 'Near Aluva Market, Aluva',
+    district: 'ernakulam',
+    capacity: 250,
+    latitude: 10.1076,
+    longitude: 76.3516,
+  },
+  {
+    name: 'Chalakudy Town Hall',
+    address: 'Main Road, Chalakudy',
+    district: 'thrissur',
+    capacity: 400,
+    latitude: 10.307,
+    longitude: 76.3337,
+  },
+  {
+    name: 'Nilambur Govt. UP School',
+    address: 'Chanthakunnu, Nilambur',
+    district: 'malappuram',
+    capacity: 150,
+    latitude: 11.2769,
+    longitude: 76.2256,
+  },
+  {
+    name: 'Ranni St. Thomas Hall',
+    address: 'Ittiyappara, Ranni',
+    district: 'pathanamthitta',
+    capacity: 200,
+    latitude: 9.3846,
+    longitude: 76.7856,
+  },
+  {
+    name: 'Kalpetta Municipal Hall',
+    address: 'Kalpetta Town, Wayanad',
+    district: 'wayanad',
+    capacity: 220,
+    latitude: 11.6085,
+    longitude: 76.0827,
+  },
+];
+
+async function seedMapDemo() {
+  if (process.env.NODE_ENV === 'production') return;
+  let filled = 0;
+  for (const [name, [latitude, longitude]] of Object.entries(SAMPLE_CAMP_LOCATIONS)) {
+    const { count } = await prisma.reliefCamp.updateMany({
+      where: { name, latitude: null },
+      data: { latitude, longitude },
+    });
+    filled += count;
+  }
+  for (const [locationText, [latitude, longitude]] of Object.entries(SAMPLE_INCIDENT_LOCATIONS)) {
+    const { count } = await prisma.incidentReport.updateMany({
+      where: { locationText, latitude: null },
+      data: { latitude, longitude },
+    });
+    filled += count;
+  }
+  let created = 0;
+  for (const { district, ...camp } of EXTRA_CAMPS) {
+    if (await prisma.reliefCamp.findFirst({ where: { name: camp.name } })) continue;
+    await prisma.reliefCamp.create({
+      data: { ...camp, district: { connect: { slug: district } } },
+    });
+    created++;
+  }
+  console.log(`Map demo: ${filled} locations filled in, ${created} extra camps created`);
+}
+
 try {
   await seedDistricts();
   await seedSampleData();
+  await seedMapDemo();
   await seedUsers();
 } finally {
   await prisma.$disconnect();

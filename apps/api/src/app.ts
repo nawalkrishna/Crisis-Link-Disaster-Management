@@ -10,6 +10,7 @@ import { errorHandler, notFoundHandler } from './lib/errors';
 import { requireJsonBody, verifyOrigin } from './lib/security';
 import { authRouter } from './routes/auth';
 import { campsRouter } from './routes/camps';
+import { geoRouter } from './routes/geo';
 import { donationsRouter } from './routes/donations';
 import { evacueesRouter } from './routes/evacuees';
 import { incidentsRouter } from './routes/incidents';
@@ -18,7 +19,7 @@ import { overviewRouter } from './routes/overview';
 import { tasksRouter } from './routes/tasks';
 import { usersRouter } from './routes/users';
 
-const VERSION = '0.3.0';
+const VERSION = '0.4.0';
 
 /**
  * Builds the Express app WITHOUT starting a server.
@@ -62,6 +63,7 @@ export function createApp() {
   api.use(authRouter);
   api.use(usersRouter);
   api.use(overviewRouter);
+  api.use(geoRouter); // before campsRouter, so /camps/nearby isn't read as /camps/:id
   api.use(campsRouter);
   api.use(evacueesRouter);
   api.use(needsRouter);

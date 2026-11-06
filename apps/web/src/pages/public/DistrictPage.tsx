@@ -1,5 +1,6 @@
 import { useParams } from 'react-router';
 import { CampCard, IncidentCard, StatTile } from '../../components/domain';
+import { LiveMapSection } from '../../components/LiveMapSection';
 import { EmptyState, ErrorState, PageHeader, PageLoader, Spinner } from '../../components/ui';
 import { useCamps, useDistrict, useIncidents } from '../../lib/queries';
 import NotFoundPage from '../NotFoundPage';
@@ -32,6 +33,10 @@ export default function DistrictPage() {
           value={d.activeIncidents}
           emphasis={d.activeIncidents > 0}
         />
+      </div>
+
+      <div className="mb-10">
+        <LiveMapSection district={d.slug} />
       </div>
 
       <div className="grid gap-10 lg:grid-cols-3">

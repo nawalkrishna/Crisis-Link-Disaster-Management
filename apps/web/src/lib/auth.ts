@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CurrentUser, LoginInput, RegisterInput } from '@crisislink/shared';
 import { api, isApiError } from './api';
+import { reconnectLive } from './socket';
 
 /**
  * "Who is logged in?" is just another piece of server state: GET /auth/me.
@@ -33,6 +34,7 @@ export function useLogin() {
       // Data cached while logged out (or as someone else) may now be incomplete: refetch it.
       queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== 'auth' });
       queryClient.setQueryData(meKey, user);
+      reconnectLive(); // the live connection should now know who we are
     },
   });
 }
@@ -42,7 +44,10 @@ export function useRegister() {
   return useMutation({
     mutationFn: (input: RegisterInput) =>
       api<CurrentUser>('/auth/register', { method: 'POST', body: input }),
-    onSuccess: (user) => queryClient.setQueryData(meKey, user),
+    onSuccess: (user) => {
+      queryClient.setQueryData(meKey, user);
+      reconnectLive(); // join our personal room, so "you've been approved" reaches us
+    },
   });
 }
 
@@ -54,6 +59,7 @@ export function useLogout() {
       // Forget everything cached for this user (evacuee lists, donor phones...).
       queryClient.clear();
       queryClient.setQueryData(meKey, null);
+      reconnectLive();
     },
   });
 }

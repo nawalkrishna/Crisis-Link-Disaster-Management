@@ -78,43 +78,70 @@ export async function endSession(req: Request, res: Response) {
   res.clearCookie(SESSION_COOKIE, { ...cookieOptions(), maxAge: undefined });
 }
 
-/** Runs on every request: if a valid session cookie is present, sets req.user. */
-export const loadSession: RequestHandler = async (req, res, next) => {
-  const token: unknown = req.cookies?.[SESSION_COOKIE];
-  if (typeof token !== 'string' || token.length > 100) return next();
-
+/**
+ * Look up a session token. Shared by HTTP requests (loadSession below) and the
+ * real-time socket handshake (src/realtime.ts), so both apply exactly the same rules.
+ * Returns null for unknown, expired or suspended sessions (and deletes those rows).
+ */
+export async function findSession(token: unknown) {
+  if (typeof token !== 'string' || token.length > 100) return null;
   const id = hashToken(token);
   const session = await prisma.session.findUnique({
     where: { id },
     include: { user: { select: sessionUserSelect } },
   });
+  if (!session) return null;
+  if (session.expiresAt.getTime() <= Date.now() || session.user.status === 'SUSPENDED') {
+    await prisma.session.delete({ where: { id } }).catch(() => {});
+    return null;
+  }
+  const { coordinatedCamps, ...user } = session.user;
+  const authUser: AuthUser = { ...user, campIds: coordinatedCamps.map((c) => c.campId) };
+  return { id, expiresAt: session.expiresAt, user: authUser };
+}
 
-  const now = Date.now();
-  if (!session || session.expiresAt.getTime() <= now || session.user.status === 'SUSPENDED') {
-    if (session) await prisma.session.delete({ where: { id } }).catch(() => {});
+/** Fresh AuthUser from the database (used when a user's role or camps change). */
+export async function loadAuthUser(userId: string): Promise<AuthUser | null> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: sessionUserSelect });
+  if (!user) return null;
+  const { coordinatedCamps, ...rest } = user;
+  return { ...rest, campIds: coordinatedCamps.map((c) => c.campId) };
+}
+
+/** Runs on every request: if a valid session cookie is present, sets req.user. */
+export const loadSession: RequestHandler = async (req, res, next) => {
+  const token: unknown = req.cookies?.[SESSION_COOKIE];
+  if (token === undefined) return next();
+
+  const session = await findSession(token);
+  if (!session) {
     res.clearCookie(SESSION_COOKIE, { ...cookieOptions(), maxAge: undefined });
     return next();
   }
-
-  const { coordinatedCamps, ...user } = session.user;
-  req.user = { ...user, campIds: coordinatedCamps.map((c) => c.campId) };
-  req.sessionId = id;
+  req.user = session.user;
+  req.sessionId = session.id;
 
   // Sliding expiry: active users stay logged in; idle sessions expire.
   // Only write when half the lifetime is used up, to avoid a DB write on every request.
+  const now = Date.now();
   if (session.expiresAt.getTime() - now < config.sessionTtlMs / 2) {
     await prisma.session.update({
-      where: { id },
+      where: { id: session.id },
       data: { expiresAt: new Date(now + config.sessionTtlMs), lastSeenAt: new Date(now) },
     });
-    res.cookie(SESSION_COOKIE, token, cookieOptions());
+    res.cookie(SESSION_COOKIE, token as string, cookieOptions());
   }
   next();
 };
 
-/** Delete every session of a user, optionally keeping the current one. */
-export function revokeSessions(userId: string, exceptSessionId?: string) {
-  return prisma.session.deleteMany({
-    where: { userId, ...(exceptSessionId && { id: { not: exceptSessionId } }) },
-  });
+/**
+ * Delete every session of a user, optionally keeping the current one.
+ * Returns the deleted session ids so live socket connections using them can be closed too.
+ */
+export async function revokeSessions(userId: string, exceptSessionId?: string) {
+  const where = { userId, ...(exceptSessionId && { id: { not: exceptSessionId } }) };
+  const sessions = await prisma.session.findMany({ where, select: { id: true } });
+  const ids = sessions.map((s) => s.id);
+  await prisma.session.deleteMany({ where: { id: { in: ids } } });
+  return ids;
 }

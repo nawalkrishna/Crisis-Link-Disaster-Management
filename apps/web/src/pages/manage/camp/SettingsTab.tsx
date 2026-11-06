@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { CAMP_STATUSES, updateCampSchema, type CampSummary } from '@crisislink/shared';
+import { LocationPicker } from '../../../components/map';
+import { pickOptions, toPoint } from '../../../components/map/map-style';
 import { useToast } from '../../../components/toast-context';
 import { Button, Card, Field, FormError, Input, Select } from '../../../components/ui';
 import {
@@ -15,16 +17,19 @@ export function SettingsTab({ camp }: { camp: CampSummary }) {
   const update = useUpdateCamp(camp.id);
   const toast = useToast();
   const [formError, setFormError] = useState<string | null>(null);
-  const { register, handleSubmit, formState, setError } = useZodForm(updateCampSchema, {
-    name: camp.name,
-    address: camp.address,
-    capacity: camp.capacity,
-    status: camp.status,
-    contactName: camp.contactName ?? undefined,
-    contactPhone: camp.contactPhone ?? undefined,
-    latitude: camp.latitude ?? undefined,
-    longitude: camp.longitude ?? undefined,
-  });
+  const { register, handleSubmit, formState, setError, setValue, watch } = useZodForm(
+    updateCampSchema,
+    {
+      name: camp.name,
+      address: camp.address,
+      capacity: camp.capacity,
+      status: camp.status,
+      contactName: camp.contactName ?? undefined,
+      contactPhone: camp.contactPhone ?? undefined,
+      latitude: camp.latitude ?? undefined,
+      longitude: camp.longitude ?? undefined,
+    },
+  );
   const errors = formState.errors;
 
   const onSubmit = handleSubmit((values) => {
@@ -106,6 +111,18 @@ export function SettingsTab({ camp }: { camp: CampSummary }) {
             />
           )}
         </Field>
+        <div className="sm:col-span-2">
+          <LocationPicker
+            value={toPoint(watch('latitude'), watch('longitude'))}
+            onChange={(p) => {
+              setValue('latitude', p.latitude, pickOptions);
+              setValue('longitude', p.longitude, pickOptions);
+            }}
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            Click the map (or drag the pin) to fill in latitude and longitude.
+          </p>
+        </div>
         <div className="sm:col-span-2">
           <Button type="submit" loading={update.isPending} disabled={!formState.isDirty}>
             Save changes

@@ -9,6 +9,7 @@ import { prisma } from '../db';
 import type { Prisma } from '../generated/prisma/client';
 import { assertCampAccess } from '../auth/policies';
 import { conflict, notFound, parse } from '../lib/http';
+import { publish } from '../realtime';
 
 export const needsRouter = Router();
 
@@ -69,6 +70,7 @@ needsRouter.post('/camps/:id/needs', async (req, res) => {
   if (!camp) throw notFound('Camp');
   if (camp.status === 'CLOSED') throw conflict('CAMP_CLOSED', 'Cannot add needs to a closed camp');
   const need = await prisma.campNeed.create({ data: { ...data, campId }, include: needInclude });
+  publish(req, { type: 'needs.changed', campId });
   res.status(201).json(need);
 });
 
@@ -79,5 +81,6 @@ needsRouter.patch('/needs/:id', async (req, res) => {
   if (!existing) throw notFound('Need');
   assertCampAccess(req.user, existing.campId);
   const need = await prisma.campNeed.update({ where: { id }, data, include: needInclude });
+  publish(req, { type: 'needs.changed', campId: existing.campId });
   res.json(need);
 });

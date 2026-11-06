@@ -1,1 +1,48 @@
 @import 'tailwindcss';
+
+/* ---------- Map markers (HTML markers drawn by Leaflet divIcons) ---------- */
+
+/* Incident: a rotated square ("diamond") with "!", so it reads differently from round camps. */
+.cl-incident {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #fff;
+  border-radius: 4px;
+  transform: rotate(45deg);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.4);
+  color: #fff;
+  font-size: 12px;
+}
+.cl-incident > b {
+  transform: rotate(-45deg);
+}
+
+/* "You are here": blue dot with a halo, like phone map apps. */
+.cl-you {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border: 3px solid #fff;
+  border-radius: 9999px;
+  background: #2563eb;
+  box-shadow: 0 0 0 6px rgb(37 99 235 / 0.25);
+}
+
+/* Picked location in forms. */
+.cl-pin {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border: 3px solid #fff;
+  border-radius: 9999px 9999px 9999px 0;
+  background: #0f172a;
+  transform: rotate(-45deg);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.4);
+}
+
+/* Leaflet popups use their own font; match the app. */
+.leaflet-container {
+  font: inherit;
+}

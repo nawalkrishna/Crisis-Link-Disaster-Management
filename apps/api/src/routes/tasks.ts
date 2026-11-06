@@ -17,6 +17,7 @@ import {
 } from '../auth/policies';
 import type { AuthUser } from '../auth/session';
 import { HttpError, conflict, forbidden, notFound, parse } from '../lib/http';
+import { publish } from '../realtime';
 
 export const tasksRouter = Router();
 
@@ -122,6 +123,7 @@ tasksRouter.post('/tasks', requireStaff, async (req, res) => {
     data: { ...data, campId, districtId, createdById: user.id },
     include: taskInclude,
   });
+  publish(req, { type: 'tasks.changed', campId: task.campId });
   res.status(201).json(task);
 });
 
@@ -149,6 +151,7 @@ tasksRouter.post('/tasks/:id/claim', requireAuth, async (req, res) => {
     data: { status: 'ASSIGNED', assigneeId: user.id },
   });
   if (count === 0) throw conflict('TASK_TAKEN', 'This task is no longer open');
+  publish(req, { type: 'tasks.changed', campId: task.campId });
 
   res.json(await prisma.volunteerTask.findUniqueOrThrow({ where: { id }, include: taskInclude }));
 });
@@ -215,6 +218,7 @@ tasksRouter.patch('/tasks/:id', requireAuth, async (req, res) => {
     },
   });
   if (count === 0) throw conflict('STALE_TASK', 'The task was changed by someone else - reload it');
+  publish(req, { type: 'tasks.changed', campId: task.campId });
 
   res.json(await prisma.volunteerTask.findUniqueOrThrow({ where: { id }, include: taskInclude }));
 });

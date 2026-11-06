@@ -10,6 +10,7 @@ import type { Prisma } from '../generated/prisma/client';
 import { isStaff, requireStaff } from '../auth/policies';
 import { notFound, parse } from '../lib/http';
 import { publicSubmitLimiter } from '../lib/security';
+import { publish } from '../realtime';
 
 export const incidentsRouter = Router();
 
@@ -70,6 +71,15 @@ incidentsRouter.post('/incidents', publicSubmitLimiter, async (req, res) => {
     data: { ...data, district: { connect: { slug: district } } },
     include: incidentInclude,
   });
+  publish(req, {
+    type: 'incident.changed',
+    incidentId: incident.id,
+    created: {
+      severity: incident.severity,
+      district: incident.district.name,
+      locationText: incident.locationText,
+    },
+  });
   res.status(201).json(forViewer(incident, isStaff(req.user)));
 });
 
@@ -82,5 +92,6 @@ incidentsRouter.patch('/incidents/:id', requireStaff, async (req, res) => {
     data,
     include: incidentInclude,
   });
+  publish(req, { type: 'incident.changed', incidentId: id });
   res.json(incident);
 });

@@ -28,6 +28,8 @@ import type {
   DonationStatus,
   IncidentStatus,
   Priority,
+  MapResponse,
+  NearbyCamp,
 } from '@crisislink/shared';
 import { api } from './api';
 import { meKey } from './auth';
@@ -52,6 +54,8 @@ export const keys = {
   tasks: (params: Params = {}) => ['tasks', params] as const,
   users: (params: Params = {}) => ['users', params] as const,
   volunteers: (params: Params = {}) => ['volunteers', params] as const,
+  map: (district?: string) => ['map', district ?? 'all'] as const,
+  nearby: (params: Params) => ['nearby', params] as const,
 };
 
 // ---------- Public reads ----------
@@ -300,3 +304,22 @@ export function useChangePassword() {
       }),
   });
 }
+
+// ---------- Maps ----------
+
+export const useMapData = (district?: string) =>
+  useQuery({
+    queryKey: keys.map(district),
+    queryFn: () => api<MapResponse>('/map', { query: { district } }),
+  });
+
+/** Closest camps to a point. Disabled until we know where the person is. */
+export const useNearbyCamps = (point: { latitude: number; longitude: number } | null) =>
+  useQuery({
+    queryKey: keys.nearby({ lat: point?.latitude, lng: point?.longitude }),
+    queryFn: () =>
+      api<{ items: NearbyCamp[] }>('/camps/nearby', {
+        query: { lat: point!.latitude, lng: point!.longitude, radiusKm: 100 },
+      }).then((r) => r.items),
+    enabled: point !== null,
+  });

@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { CheckCircle2, LocateFixed, PhoneCall } from 'lucide-react';
 import { INCIDENT_TYPES, PRIORITIES, createIncidentSchema } from '@crisislink/shared';
 import { DistrictOptions } from '../../components/filters';
+import { LocationPicker } from '../../components/map';
+import { pickOptions, toPoint } from '../../components/map/map-style';
 import {
   Button,
   ButtonLink,
@@ -16,42 +18,30 @@ import {
 import { useCurrentUser } from '../../lib/auth';
 import { applyServerErrors, emptyToUndefined, useZodForm } from '../../lib/forms';
 import { humanize } from '../../lib/format';
+import { useGeolocation } from '../../lib/geolocation';
 import { useReportIncident } from '../../lib/queries';
 
 export default function ReportIncidentPage() {
   const report = useReportIncident();
   const { data: user } = useCurrentUser();
   const [formError, setFormError] = useState<string | null>(null);
-  const [locating, setLocating] = useState(false);
-  const [locationNote, setLocationNote] = useState<string | null>(null);
+  const geo = useGeolocation();
 
   const { register, handleSubmit, formState, setError, setValue, watch, reset } = useZodForm(
     createIncidentSchema,
     { severity: 'HIGH', type: 'FLOOD', reporterName: user?.fullName },
   );
   const errors = formState.errors;
-  const latitude = watch('latitude');
+  const point = toPoint(watch('latitude'), watch('longitude'));
 
-  /** The browser's Geolocation API: the user must allow it; we only read it once. */
-  const attachLocation = () => {
-    if (!('geolocation' in navigator)) {
-      setLocationNote('Location is not available on this device.');
-      return;
-    }
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setValue('latitude', Number(pos.coords.latitude.toFixed(5)));
-        setValue('longitude', Number(pos.coords.longitude.toFixed(5)));
-        setLocationNote(`Location attached (±${Math.round(pos.coords.accuracy)} m).`);
-        setLocating(false);
-      },
-      () => {
-        setLocationNote('Could not get your location - describe the place instead.');
-        setLocating(false);
-      },
-      { enableHighAccuracy: true, timeout: 10_000 },
-    );
+  const setPoint = (p: { latitude: number; longitude: number }) => {
+    setValue('latitude', p.latitude, pickOptions);
+    setValue('longitude', p.longitude, pickOptions);
+  };
+  /** Use the phone's GPS - the most accurate option when you're at the scene. */
+  const attachLocation = async () => {
+    const position = await geo.locate();
+    if (position) setPoint(position);
   };
 
   const onSubmit = handleSubmit((values) => {
@@ -80,7 +70,7 @@ export default function ReportIncidentPage() {
             onClick={() => {
               report.reset();
               reset();
-              setLocationNote(null);
+              geo.setPosition(null);
             }}
           >
             Report another
@@ -152,15 +142,25 @@ export default function ReportIncidentPage() {
             {(a) => <Input {...a} {...register('locationText')} />}
           </Field>
           <div>
-            <Button variant="secondary" size="sm" onClick={attachLocation} loading={locating}>
-              <LocateFixed className="size-4" aria-hidden />
-              {latitude !== undefined ? 'Update my location' : 'Attach my location'}
-            </Button>
-            {locationNote && (
-              <p className="mt-1 text-xs text-slate-600" role="status">
-                {locationNote}
-              </p>
-            )}
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void attachLocation()}
+                loading={geo.locating}
+              >
+                <LocateFixed className="size-4" aria-hidden />
+                {point ? 'Use my location instead' : 'Use my location'}
+              </Button>
+              <span className="text-xs text-slate-600" role="status">
+                {geo.error
+                  ? `${geo.error} Tap the map instead.`
+                  : point
+                    ? `Pinned at ${point.latitude}, ${point.longitude}${geo.position ? ` (±${geo.position.accuracy} m)` : ''}`
+                    : 'or tap the map where it is happening (optional)'}
+              </span>
+            </div>
+            <LocationPicker value={point} onChange={setPoint} className="h-56" />
           </div>
           <Field
             label="Description"

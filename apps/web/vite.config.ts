@@ -10,6 +10,8 @@ export default defineConfig({
     // it to the API. Same origin for the browser = no CORS headaches locally.
     proxy: {
       '/api': 'http://localhost:4000',
+      // Live updates: `ws: true` forwards the WebSocket upgrade, not just plain HTTP.
+      '/socket.io': { target: 'http://localhost:4000', ws: true },
     },
   },
 });

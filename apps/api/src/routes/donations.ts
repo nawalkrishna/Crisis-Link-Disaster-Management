@@ -10,6 +10,7 @@ import type { Prisma } from '../generated/prisma/client';
 import { assertCampAccess, isActive, requireStaff } from '../auth/policies';
 import { conflict, forbidden, notFound, parse } from '../lib/http';
 import { publicSubmitLimiter } from '../lib/security';
+import { publish } from '../realtime';
 
 export const donationsRouter = Router();
 
@@ -56,6 +57,7 @@ donationsRouter.post('/donations', publicSubmitLimiter, async (req, res) => {
     data: { ...data, needId, campId: resolvedCampId },
     include: donationInclude,
   });
+  publish(req, { type: 'donations.changed', campId: donation.campId });
   res.status(201).json(donation);
 });
 
@@ -101,5 +103,10 @@ donationsRouter.patch('/donations/:id', async (req, res) => {
     return tx.donation.findUniqueOrThrow({ where: { id }, include: donationInclude });
   });
 
+  publish(req, { type: 'donations.changed', campId: target.campId });
+  // Receiving a donation can move a need's progress bar (or fulfil it).
+  if (donation.campId && donation.need) {
+    publish(req, { type: 'needs.changed', campId: donation.campId });
+  }
   res.json(donation);
 });

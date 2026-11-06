@@ -13,6 +13,7 @@ import { requireAuth } from '../auth/policies';
 import { endSession, revokeSessions, startSession } from '../auth/session';
 import { HttpError, conflict, notFound, parse } from '../lib/http';
 import { loginLimiter, registerLimiter } from '../lib/security';
+import { disconnectSessions, publish } from '../realtime';
 
 export const authRouter = Router();
 
@@ -68,6 +69,7 @@ authRouter.post('/auth/register', registerLimiter, async (req, res) => {
   });
 
   await startSession(req, res, user.id);
+  publish(req, { type: 'volunteers.changed' }); // a new sign-up waiting for approval
   res.status(201).json(await loadCurrentUser(user.id));
 });
 
@@ -95,7 +97,9 @@ authRouter.post('/auth/login', loginLimiter, async (req, res) => {
 });
 
 authRouter.post('/auth/logout', async (req, res) => {
+  const sessionId = req.sessionId;
   await endSession(req, res);
+  if (sessionId) disconnectSessions([sessionId]);
   res.status(204).end();
 });
 
@@ -141,6 +145,7 @@ authRouter.post('/auth/change-password', requireAuth, async (req, res) => {
     where: { id: req.user!.id },
     data: { passwordHash: await hashPassword(newPassword) },
   });
-  const { count } = await revokeSessions(req.user!.id, req.sessionId);
-  res.json({ ok: true, otherSessionsRevoked: count });
+  const revoked = await revokeSessions(req.user!.id, req.sessionId);
+  disconnectSessions(revoked);
+  res.json({ ok: true, otherSessionsRevoked: revoked.length });
 });

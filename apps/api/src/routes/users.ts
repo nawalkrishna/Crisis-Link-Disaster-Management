@@ -12,6 +12,7 @@ import { requireAdmin, requireStaff } from '../auth/policies';
 import { revokeSessions } from '../auth/session';
 import { HttpError, notFound, parse } from '../lib/http';
 import { loadCurrentUser } from './auth';
+import { disconnectSessions, notifyUser, publish } from '../realtime';
 
 export const usersRouter = Router();
 
@@ -76,7 +77,9 @@ usersRouter.patch('/users/:id', requireAdmin, async (req, res) => {
     }
   });
   // Suspension takes effect immediately: kill all of the user's sessions.
-  if (status === 'SUSPENDED') await revokeSessions(id);
+  if (status === 'SUSPENDED') disconnectSessions(await revokeSessions(id));
+  await notifyUser(id);
+  publish(req, { type: 'volunteers.changed' });
 
   res.json(await loadCurrentUser(id));
 });
@@ -98,6 +101,7 @@ usersRouter.put('/users/:id/camps', requireAdmin, async (req, res) => {
       data: [...new Set(campIds)].map((campId) => ({ userId: id, campId })),
     }),
   ]);
+  await notifyUser(id);
   res.json(await loadCurrentUser(id));
 });
 
@@ -152,5 +156,7 @@ usersRouter.post('/volunteers/:id/approve', requireStaff, async (req, res) => {
   if (count === 0) {
     throw new HttpError(409, 'NOT_PENDING', 'No pending volunteer with this id');
   }
+  await notifyUser(id);
+  publish(req, { type: 'volunteers.changed' });
   res.json(await loadCurrentUser(id));
 });

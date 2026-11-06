@@ -1,6 +1,7 @@
 import { useParams } from 'react-router';
 import { ExternalLink, MapPin, Phone, Settings } from 'lucide-react';
 import { NeedRow } from '../../components/domain';
+import { CrisisMap } from '../../components/map';
 import {
   Badge,
   ButtonLink,
@@ -88,6 +89,15 @@ export default function CampPage() {
                 </a>
               )}
             </Card>
+          )}
+          {c.latitude !== null && c.longitude !== null && (
+            <CrisisMap
+              camps={[
+                { ...c, district: c.district.name, latitude: c.latitude, longitude: c.longitude },
+              ]}
+              className="h-56"
+              label={`Map showing ${c.name}`}
+            />
           )}
           {c.latitude !== null && c.longitude !== null && (
             <a

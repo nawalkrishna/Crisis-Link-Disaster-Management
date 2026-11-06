@@ -9,6 +9,7 @@ import { prisma } from '../db';
 import type { Prisma } from '../generated/prisma/client';
 import { assertCampAccess } from '../auth/policies';
 import { conflict, notFound, parse } from '../lib/http';
+import { publish } from '../realtime';
 
 /**
  * Evacuee records are PERSONAL DATA (names, ages, medical notes) about people in a crisis.
@@ -63,6 +64,7 @@ evacueesRouter.post('/camps/:id/evacuees', async (req, res) => {
     return created;
   });
 
+  publish(req, { type: 'evacuees.changed', campId });
   res.status(201).json(evacuee);
 });
 
@@ -95,5 +97,6 @@ evacueesRouter.patch('/evacuees/:id', async (req, res) => {
     return updated;
   });
 
+  publish(req, { type: 'evacuees.changed', campId: evacuee.campId });
   res.json(evacuee);
 });

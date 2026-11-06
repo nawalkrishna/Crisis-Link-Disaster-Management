@@ -85,6 +85,8 @@ coordinator, _camp staff_ = admin or a coordinator of that camp, _admin_ = activ
 | `GET /volunteers`                           | staff            | Active volunteers (`district`, `skill`, `available`)    |
 | `POST /volunteers/:id/approve`              | staff            | Approve a pending volunteer                             |
 | `GET /camps`, `/camps/:id`                  | public           | Camps with live occupancy                               |
+| `GET /camps/nearby?lat=&lng=`               | public           | Closest camps with space (`radiusKm`, `hasSpace`)       |
+| `GET /map`                                  | public           | Camp + active incident markers (`district` filter)      |
 | `POST /camps`                               | admin            | Open a camp                                             |
 | `PATCH /camps/:id`                          | camp staff       | Update a camp                                           |
 | `GET, POST /camps/:id/evacuees`             | camp staff       | People in a camp / check someone in (capacity enforced) |
@@ -102,6 +104,16 @@ coordinator, _camp staff_ = admin or a coordinator of that camp, _admin_ = activ
 | `POST /tasks/:id/claim`                     | volunteer        | Active volunteer takes an open task (skill checked)     |
 | `PATCH /tasks/:id`                          | assignee / staff | Move through the task state machine, edit, assign       |
 
+### Live updates (Socket.IO)
+
+The API also accepts Socket.IO connections at `/socket.io/` on the same port. The server sends a
+single event, `live`, carrying a small signal such as `{ "type": "needs.changed", "campId": "…" }`
+(all types are in `packages/shared/src/live.ts`). Signals carry ids only, never personal data;
+clients refetch through the REST API above, which applies the usual permissions. Who receives
+what: everyone gets camp, need and incident changes; active accounts also get task changes;
+staff also get donation and volunteer changes; each user gets `me.changed` when an admin changes
+their account.
+
 ## Project layout
 
 ```
@@ -109,11 +121,12 @@ crisislink/
 ├── apps/
 │   ├── api/          Express 5 + TypeScript REST API (dev: node --watch + tsx, build: tsup)
 │   │   ├── prisma/       schema.prisma, migrations/, seed.ts
-│   │   └── src/          app.ts, routes/, auth/ (sessions, policies), lib/, scripts/, db.ts
+│   │   └── src/          app.ts, realtime.ts (Socket.IO), routes/, auth/ (sessions,
+│   │                     policies), lib/, scripts/, db.ts
 │   └── web/          React 19 + Vite + Tailwind CSS v4
-│       └── src/          router.tsx, lib/ (api client, queries, auth, forms),
-│                         components/ (UI kit, layout, domain cards), pages/ (public, auth,
-│                         volunteer, manage, admin)
+│       └── src/          router.tsx, lib/ (api client, queries, auth, forms, socket, live),
+│                         components/ (UI kit, layout, domain cards, map/), pages/ (public,
+│                         auth, volunteer, manage, admin)
 ├── packages/
 │   └── shared/       Types & constants imported by BOTH api and web
 ├── tsconfig.base.json   strict TypeScript settings every workspace extends
@@ -219,6 +232,33 @@ crisislink/
 - **Security on the frontend** — no tokens in JavaScript (httpOnly cookie), `?next=` redirects
   restricted to our own paths (no open redirect), cached personal data cleared on logout.
 
+## Concepts introduced in Phase 4
+
+- **WebSockets** — a long-lived, two-way connection, so the server can _push_ changes instead of
+  the browser polling. Socket.IO adds automatic reconnection, an HTTP fallback and **rooms**
+  (`public`, `members`, `staff`, `user:<id>`, `session:<id>`) to target who hears what.
+- **Signals, not data** — events say "camp X changed", never "here is camp X". The browser turns
+  them into TanStack Query invalidations and refetches over HTTP, so permission rules stay in
+  one place and a client that missed events simply refetches on reconnect.
+- **Socket authentication** — the handshake reuses the HTTP session lookup (`findSession`), and
+  logging out, suspension or a password change closes that session's sockets immediately.
+- **Cross-Site WebSocket Hijacking** — CORS does **not** apply to WebSocket upgrades, so the
+  server checks the `Origin` header itself (`allowRequest`); otherwise any website could open a
+  socket with a visitor's cookie.
+- **Echo suppression & coalescing** — writes carry `X-Socket-Id` so the tab that made a change
+  isn't told about it again; bursts of events are batched into one refetch per 300 ms.
+- **`useSyncExternalStore`** — the React way to read state that lives outside React (the socket's
+  connected/disconnected status in the footer).
+- **Web maps** — Leaflet draws OpenStreetMap _tiles_ (256 px images per zoom level) with our own
+  layers on top: camps coloured by how full they are, incidents as a different _shape_ so the
+  map doesn't rely on colour alone. Leaflet is lazy-loaded in its own chunk.
+- **Geodesy without PostGIS** — the haversine formula gives great-circle distance; the
+  nearest-camp query first narrows by a lat/lng **bounding box** (served by an index), then
+  computes exact distances only for the survivors. PostGIS (`geography`, GiST indexes,
+  `ST_DWithin`) is the next step for millions of points or flood-zone polygons.
+- **Geolocation API** — "find camps near me" and "use my location" ask permission and read the
+  position once (no tracking); a map click or drag is the fallback.
+
 ## Roadmap
 
 - [x] **Phase 0** — Foundations: git, TypeScript monorepo, lint/format, API + web skeleton
@@ -228,7 +268,7 @@ crisislink/
       tasks, CSRF protection, rate limiting
 - [x] **Phase 3** — Frontend rebuild: public pages, volunteer task board, coordinator camp
       management, admin panel (React Router, TanStack Query, react-hook-form + Zod)
-- [ ] **Phase 4** — Real-time updates (Socket.IO) and maps (Leaflet + PostGIS)
+- [x] **Phase 4** — Real-time updates (Socket.IO), maps (Leaflet), nearest camp with space
 - [ ] **Phase 5** — Offline-first PWA, SMS alerts
 - [ ] **Phase 6** — Tests (Vitest, Playwright), Docker, CI/CD, deployment, monitoring
 - [ ] **Phase 7** — AI report triage, Malayalam i18n, analytics

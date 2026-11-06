@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { createCampSchema } from '@crisislink/shared';
 import { DistrictOptions } from '../../components/filters';
+import { LocationPicker } from '../../components/map';
+import { pickOptions, toPoint } from '../../components/map/map-style';
 import { useToast } from '../../components/toast-context';
 import { Button, Card, Field, FormError, Input, PageHeader, Select } from '../../components/ui';
 import { applyServerErrors, emptyToUndefined, toOptionalNumber, useZodForm } from '../../lib/forms';
@@ -12,7 +14,8 @@ export default function NewCampPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const [formError, setFormError] = useState<string | null>(null);
-  const { register, handleSubmit, formState, setError } = useZodForm(createCampSchema);
+  const { register, handleSubmit, formState, setError, setValue, watch } =
+    useZodForm(createCampSchema);
   const errors = formState.errors;
 
   const onSubmit = handleSubmit((values) => {
@@ -92,6 +95,18 @@ export default function NewCampPage() {
               />
             )}
           </Field>
+          <div className="sm:col-span-2">
+            <LocationPicker
+              value={toPoint(watch('latitude'), watch('longitude'))}
+              onChange={(p) => {
+                setValue('latitude', p.latitude, pickOptions);
+                setValue('longitude', p.longitude, pickOptions);
+              }}
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Click the map (or drag the pin) to fill in latitude and longitude.
+            </p>
+          </div>
           <div className="sm:col-span-2">
             <Button type="submit" loading={create.isPending}>
               Open camp
