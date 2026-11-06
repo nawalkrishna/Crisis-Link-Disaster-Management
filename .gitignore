@@ -22,3 +22,6 @@ npm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+
+# Prisma generated client (re-created by `npm install` / `npm run db:generate`)
+apps/api/src/generated/

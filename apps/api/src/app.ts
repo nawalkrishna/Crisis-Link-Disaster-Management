@@ -1,10 +1,18 @@
-import express, { type ErrorRequestHandler, type RequestHandler } from 'express';
+import express, { Router } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import type { ApiError, HealthResponse } from '@crisislink/shared';
+import type { HealthResponse } from '@crisislink/shared';
 import { config } from './config';
+import { prisma } from './db';
+import { errorHandler, notFoundHandler } from './lib/errors';
+import { campsRouter } from './routes/camps';
+import { donationsRouter } from './routes/donations';
+import { evacueesRouter } from './routes/evacuees';
+import { incidentsRouter } from './routes/incidents';
+import { needsRouter } from './routes/needs';
+import { overviewRouter } from './routes/overview';
 
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 
 /**
  * Builds the Express app WITHOUT starting a server.
@@ -19,42 +27,35 @@ export function createApp() {
   app.use(cors({ origin: config.corsOrigins })); // only our frontend may call us from a browser
   app.use(express.json({ limit: '100kb' }));
 
-  app.get('/api/health', (_req, res) => {
+  const api = Router();
+
+  api.get('/health', async (_req, res) => {
+    // A health check that also proves the database is reachable.
+    const database = await prisma.$queryRaw`SELECT 1`.then(
+      () => 'up' as const,
+      () => 'down' as const,
+    );
     const body: HealthResponse = {
-      status: 'ok',
+      status: database === 'up' ? 'ok' : 'degraded',
       service: 'crisislink-api',
       version: VERSION,
       uptimeSeconds: Math.round(process.uptime()),
       timestamp: new Date().toISOString(),
+      database,
     };
-    res.json(body);
+    res.status(database === 'up' ? 200 : 503).json(body);
   });
 
-  app.use(notFound);
+  api.use(overviewRouter);
+  api.use(campsRouter);
+  api.use(evacueesRouter);
+  api.use(needsRouter);
+  api.use(donationsRouter);
+  api.use(incidentsRouter);
+
+  app.use('/api', api);
+  app.use(notFoundHandler);
   app.use(errorHandler);
 
   return app;
 }
-
-const notFound: RequestHandler = (req, res) => {
-  const body: ApiError = {
-    error: { code: 'NOT_FOUND', message: `No route for ${req.method} ${req.path}` },
-  };
-  res.status(404).json(body);
-};
-
-// Express recognises error handlers by their 4 parameters, so `_next` must stay.
-const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
-  console.error(err);
-  const body: ApiError = {
-    // Never leak internal error details (stack traces, SQL...) to clients in production.
-    error: {
-      code: 'INTERNAL_ERROR',
-      message:
-        config.nodeEnv === 'production'
-          ? 'Something went wrong'
-          : String((err as Error)?.message ?? err),
-    },
-  };
-  res.status(500).json(body);
-};

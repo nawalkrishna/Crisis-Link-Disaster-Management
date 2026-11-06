@@ -19,7 +19,11 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "npm run format:check && npm run lint && npm run typecheck"
+    "check": "npm run format:check && npm run lint && npm run typecheck",
+    "db:migrate": "npm run db:migrate -w @crisislink/api",
+    "db:seed": "npm run db:seed -w @crisislink/api",
+    "db:reset": "npm run db:reset -w @crisislink/api",
+    "db:studio": "npm run db:studio -w @crisislink/api"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

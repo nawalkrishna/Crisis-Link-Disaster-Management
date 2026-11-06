@@ -1,0 +1,203 @@
+// CrisisLink data model.
+//
+// Compared with the 2024 Firestore version:
+// - one `Evacuee` table instead of one collection per district ('kannur', 'wayanad' ...)
+// - rows get generated IDs, so two people called "Rahul" no longer overwrite each other
+// - relations (camp -> district, need -> camp, donation -> need) are enforced by the database
+//   with foreign keys, so you cannot reference a camp that doesn't exist
+//
+// Volunteers and their tasks arrive in Phase 2 together with user accounts.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------- Geography ----------
+
+model District {
+  id        Int              @id @default(autoincrement())
+  slug      String           @unique
+  name      String           @unique
+  camps     ReliefCamp[]
+  incidents IncidentReport[]
+
+  @@map("districts")
+}
+
+// ---------- Relief camps ----------
+
+enum CampStatus {
+  OPEN
+  FULL
+  CLOSED
+}
+
+model ReliefCamp {
+  id           String     @id @default(uuid(7)) @db.Uuid
+  name         String
+  address      String
+  districtId   Int        @map("district_id")
+  district     District   @relation(fields: [districtId], references: [id])
+  capacity     Int
+  status       CampStatus @default(OPEN)
+  contactName  String?    @map("contact_name")
+  contactPhone String?    @map("contact_phone")
+  latitude     Float?
+  longitude    Float?
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  evacuees  Evacuee[]
+  needs     CampNeed[]
+  donations Donation[]
+
+  // An index makes "all camps in district X" fast once there are thousands of rows.
+  @@index([districtId])
+  @@map("relief_camps")
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  UNDISCLOSED
+}
+
+/// A person staying in a relief camp (called "inmate" in the 2024 version).
+model Evacuee {
+  id           String     @id @default(uuid(7)) @db.Uuid
+  campId       String     @map("camp_id") @db.Uuid
+  camp         ReliefCamp @relation(fields: [campId], references: [id], onDelete: Cascade)
+  fullName     String     @map("full_name")
+  age          Int?
+  gender       Gender     @default(UNDISCLOSED)
+  phone        String?
+  homeAddress  String?    @map("home_address")
+  medicalNotes String?    @map("medical_notes")
+  checkedInAt  DateTime   @default(now()) @map("checked_in_at")
+  /// null while the person is still in the camp.
+  checkedOutAt DateTime?  @map("checked_out_at")
+
+  @@index([campId, checkedOutAt])
+  @@map("evacuees")
+}
+
+// ---------- Needs & donations ----------
+
+enum SupplyCategory {
+  FOOD
+  WATER
+  MEDICINE
+  CLOTHING
+  HYGIENE
+  BEDDING
+  OTHER
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum NeedStatus {
+  OPEN
+  FULFILLED
+  CANCELLED
+}
+
+/// Something a camp is asking for, e.g. "200 x drinking water bottles".
+model CampNeed {
+  id                String         @id @default(uuid(7)) @db.Uuid
+  campId            String         @map("camp_id") @db.Uuid
+  camp              ReliefCamp     @relation(fields: [campId], references: [id], onDelete: Cascade)
+  item              String
+  category          SupplyCategory
+  quantityNeeded    Int            @map("quantity_needed")
+  quantityFulfilled Int            @default(0) @map("quantity_fulfilled")
+  unit              String         @default("units")
+  priority          Priority       @default(MEDIUM)
+  status            NeedStatus     @default(OPEN)
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+
+  donations Donation[]
+
+  @@index([status, priority])
+  @@index([campId])
+  @@map("camp_needs")
+}
+
+enum DonationStatus {
+  PLEDGED
+  RECEIVED
+  CANCELLED
+}
+
+model Donation {
+  id         String         @id @default(uuid(7)) @db.Uuid
+  donorName  String         @map("donor_name")
+  donorPhone String?        @map("donor_phone")
+  category   SupplyCategory
+  item       String
+  quantity   Int
+  status     DonationStatus @default(PLEDGED)
+  /// Optional: the specific need this donation answers. Camp is derived from it.
+  needId     String?        @map("need_id") @db.Uuid
+  need       CampNeed?      @relation(fields: [needId], references: [id], onDelete: SetNull)
+  campId     String?        @map("camp_id") @db.Uuid
+  camp       ReliefCamp?    @relation(fields: [campId], references: [id], onDelete: SetNull)
+  createdAt  DateTime       @default(now()) @map("created_at")
+  receivedAt DateTime?      @map("received_at")
+
+  @@index([needId])
+  @@index([campId])
+  @@map("donations")
+}
+
+// ---------- Incidents ----------
+
+enum IncidentType {
+  FLOOD
+  LANDSLIDE
+  FIRE
+  BUILDING_COLLAPSE
+  ROAD_BLOCKED
+  MEDICAL_EMERGENCY
+  OTHER
+}
+
+enum IncidentStatus {
+  REPORTED
+  VERIFIED
+  RESOLVED
+  DISMISSED
+}
+
+model IncidentReport {
+  id            String         @id @default(uuid(7)) @db.Uuid
+  type          IncidentType
+  severity      Priority
+  status        IncidentStatus @default(REPORTED)
+  description   String
+  locationText  String         @map("location_text")
+  districtId    Int            @map("district_id")
+  district      District       @relation(fields: [districtId], references: [id])
+  latitude      Float?
+  longitude     Float?
+  reporterName  String?        @map("reporter_name")
+  reporterPhone String?        @map("reporter_phone")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  @@index([status, severity])
+  @@index([districtId])
+  @@map("incident_reports")
+}
