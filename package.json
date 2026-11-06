@@ -1,6 +1,6 @@
 {
   "name": "crisislink",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "description": "Disaster-relief coordination platform for Kerala: camps, evacuees, volunteers, needs and donations.",

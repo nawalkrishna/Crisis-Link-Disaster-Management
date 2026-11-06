@@ -105,10 +105,13 @@ usersRouter.put('/users/:id/camps', requireAdmin, async (req, res) => {
 
 /** Coordinators look for available volunteers with the right skill in their district. */
 usersRouter.get('/volunteers', requireStaff, async (req, res) => {
-  const { limit, offset, district, skill, available } = parse(listVolunteersQuerySchema, req.query);
+  const { limit, offset, district, skill, available, status } = parse(
+    listVolunteersQuerySchema,
+    req.query,
+  );
   const where: Prisma.UserWhereInput = {
     role: 'VOLUNTEER',
-    status: 'ACTIVE',
+    status,
     volunteerProfile: {
       ...(district && { district: { slug: district } }),
       ...(skill && { skills: { has: skill } }),
@@ -120,8 +123,11 @@ usersRouter.get('/volunteers', requireStaff, async (req, res) => {
       where,
       select: {
         id: true,
+        email: true,
         fullName: true,
         phone: true,
+        status: true,
+        createdAt: true,
         volunteerProfile: userListSelect.volunteerProfile,
         _count: {
           select: { assignedTasks: { where: { status: { in: ['ASSIGNED', 'IN_PROGRESS'] } } } },

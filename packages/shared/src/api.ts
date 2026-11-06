@@ -3,7 +3,20 @@
  * so if one side changes a field the other side fails to compile.
  * Dates travel over JSON as ISO-8601 strings.
  */
-import type { AccountStatus, CampStatus, Priority, Role, VolunteerSkill } from './enums';
+import type {
+  AccountStatus,
+  CampStatus,
+  DonationStatus,
+  Gender,
+  IncidentStatus,
+  IncidentType,
+  NeedStatus,
+  Priority,
+  Role,
+  SupplyCategory,
+  TaskStatus,
+  VolunteerSkill,
+} from './enums';
 
 export interface HealthResponse {
   status: 'ok' | 'degraded';
@@ -85,4 +98,119 @@ export interface CurrentUser {
     skills: VolunteerSkill[];
     available: boolean;
   } | null;
+}
+
+// ---------- Response shapes used by the web app (Phase 3) ----------
+// These mirror what the API routes return (dates are ISO strings after JSON).
+
+export interface NamedRef {
+  id: string;
+  name: string;
+}
+export interface DistrictRef {
+  slug: string;
+  name: string;
+}
+
+export interface Evacuee {
+  id: string;
+  campId: string;
+  fullName: string;
+  age: number | null;
+  gender: Gender;
+  phone: string | null;
+  homeAddress: string | null;
+  medicalNotes: string | null;
+  checkedInAt: string;
+  checkedOutAt: string | null;
+}
+
+export interface CampNeed {
+  id: string;
+  campId: string;
+  item: string;
+  category: SupplyCategory;
+  quantityNeeded: number;
+  quantityFulfilled: number;
+  unit: string;
+  priority: Priority;
+  status: NeedStatus;
+  createdAt: string;
+  updatedAt: string;
+  /** Present on GET /needs (cross-camp list). */
+  camp?: NamedRef & { district: DistrictRef };
+}
+
+export interface Donation {
+  id: string;
+  donorName: string;
+  donorPhone: string | null;
+  category: SupplyCategory;
+  item: string;
+  quantity: number;
+  status: DonationStatus;
+  needId: string | null;
+  campId: string | null;
+  createdAt: string;
+  receivedAt: string | null;
+  camp: NamedRef | null;
+  need: { id: string; item: string; quantityNeeded: number; quantityFulfilled: number } | null;
+}
+
+export interface Incident {
+  id: string;
+  type: IncidentType;
+  severity: Priority;
+  status: IncidentStatus;
+  description: string;
+  locationText: string;
+  latitude: number | null;
+  longitude: number | null;
+  /** Only included for staff. */
+  reporterName?: string | null;
+  reporterPhone?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  district: DistrictRef;
+}
+
+export interface Task {
+  id: string;
+  title: string;
+  description: string;
+  priority: Priority;
+  status: TaskStatus;
+  requiredSkill: VolunteerSkill | null;
+  campId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+  camp: NamedRef | null;
+  district: DistrictRef;
+  assignee: { id: string; fullName: string; phone: string | null } | null;
+  createdBy: { id: string; fullName: string };
+}
+
+export interface UserListItem {
+  id: string;
+  email: string;
+  fullName: string;
+  phone: string | null;
+  role: Role;
+  status: AccountStatus;
+  lastLoginAt: string | null;
+  createdAt: string;
+  volunteerProfile: { skills: VolunteerSkill[]; available: boolean; district: DistrictRef } | null;
+  coordinatedCamps: { camp: NamedRef }[];
+}
+
+export interface VolunteerListItem {
+  id: string;
+  email: string;
+  fullName: string;
+  phone: string | null;
+  status: AccountStatus;
+  createdAt: string;
+  volunteerProfile: { skills: VolunteerSkill[]; available: boolean; district: DistrictRef } | null;
+  _count: { assignedTasks: number };
 }

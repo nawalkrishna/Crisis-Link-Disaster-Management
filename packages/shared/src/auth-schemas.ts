@@ -80,6 +80,8 @@ export const listVolunteersQuerySchema = paginationSchema.extend({
   district: districtSlugSchema.optional(),
   skill: z.enum(VOLUNTEER_SKILLS).optional(),
   available: z.stringbool().optional(),
+  /** PENDING lists sign-ups waiting for approval. */
+  status: z.enum(['PENDING', 'ACTIVE']).default('ACTIVE'),
 });
 
 // ---------- Tasks ----------

@@ -42,6 +42,13 @@ needsRouter.get('/needs', async (req, res) => {
   res.json({ items, total, limit, offset });
 });
 
+needsRouter.get('/needs/:id', async (req, res) => {
+  const { id } = parse(idParamSchema, req.params);
+  const need = await prisma.campNeed.findUnique({ where: { id }, include: needInclude });
+  if (!need) throw notFound('Need');
+  res.json(need);
+});
+
 needsRouter.get('/camps/:id/needs', async (req, res) => {
   const { id: campId } = parse(idParamSchema, req.params);
   const items = await prisma.campNeed.findMany({

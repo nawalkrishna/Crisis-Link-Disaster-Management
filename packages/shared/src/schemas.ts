@@ -148,6 +148,8 @@ export const listIncidentsQuerySchema = paginationSchema.extend({
   district: districtSlugSchema.optional(),
   status: z.enum(INCIDENT_STATUSES).optional(),
   severity: z.enum(PRIORITIES).optional(),
+  /** true = only REPORTED or VERIFIED (still needing attention). */
+  active: z.stringbool().optional(),
 });
 
 // ---------- Inferred input types ----------

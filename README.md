@@ -26,7 +26,16 @@ Requires **Node.js 22.12+** (see `.nvmrc`) and **PostgreSQL 15+**.
    npm run dev        # API on http://localhost:4000, web on http://localhost:5173
    ```
 
-Open http://localhost:5173. The badge top-right should say **API online**.
+Open http://localhost:5173. The footer should say **Online**.
+
+### What each role can do in the web app
+
+| Who         | Pages                                                                                                                          |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Anyone      | Dashboard, districts, camps, needs (`/needs`), pledge a donation, incidents, report one                                        |
+| Volunteer   | Sign up (`/register`), task board (`/tasks`: available + mine), account                                                        |
+| Coordinator | `/manage`: their camps → people check-in/out, needs, incoming donations, tasks, settings; approve volunteers; verify incidents |
+| Admin       | Everything above for all camps, plus `/admin/users` (roles, suspension, camp assignment) and opening new camps                 |
 
 **Sample accounts** (development only): when `DEV_SEED_PASSWORD` is set in `apps/api/.env`,
 the seed creates `admin@`, `coordinator@`, `volunteer@` and `pending@crisislink.test`, all with
@@ -102,6 +111,9 @@ crisislink/
 │   │   ├── prisma/       schema.prisma, migrations/, seed.ts
 │   │   └── src/          app.ts, routes/, auth/ (sessions, policies), lib/, scripts/, db.ts
 │   └── web/          React 19 + Vite + Tailwind CSS v4
+│       └── src/          router.tsx, lib/ (api client, queries, auth, forms),
+│                         components/ (UI kit, layout, domain cards), pages/ (public, auth,
+│                         volunteer, manage, admin)
 ├── packages/
 │   └── shared/       Types & constants imported by BOTH api and web
 ├── tsconfig.base.json   strict TypeScript settings every workspace extends
@@ -182,6 +194,31 @@ crisislink/
 - **Declaration merging** — `req.user` is added to Express's `Request` type.
 - **Bootstrap problem** — the first admin is created with a server-side script, not an API.
 
+## Concepts introduced in Phase 3
+
+- **Client-side routing** — React Router: the page changes without a full reload; URLs like
+  `/camps/:id` map to components. **Pathless layout routes** wrap groups of pages in a guard.
+- **Code splitting** — every page is `lazy`-loaded, so the public dashboard doesn't download the
+  admin panel. Check `npm run build`: one small JS file per page.
+- **Server state vs UI state** — TanStack Query owns data from the API (caching, deduplication,
+  background refetch, loading/error states); `useState` is only for UI (an open menu).
+- **Query keys & invalidation** — `lib/queries.ts` defines hierarchical keys; after a mutation we
+  invalidate e.g. `['needs']`, and every list or count showing needs refreshes itself.
+- **Auth state as server state** — "who am I" is just the cached `GET /auth/me`. Route guards in
+  the browser are for convenience; the API still enforces every rule.
+- **One validation schema, two places** — forms use the same Zod schemas as the API
+  (react-hook-form + `zodResolver`), and server-side field errors are mapped back onto inputs.
+- **URL as state** — list filters live in the query string (`?district=wayanad&priority=HIGH`),
+  so filtered views can be bookmarked, shared and undone with the back button.
+- **Accessibility** — labels wired to inputs (`useId`), errors announced (`role="alert"`),
+  live regions for toasts, keyboard focus rings, skip link, semantic tables and tabs.
+- **Mobile-first layout** — tested at 375 px wide with no horizontal scrolling; `tel:` links
+  so coordinators can call donors and volunteers with one tap.
+- **Fast Refresh boundaries** — `.tsx` files export only components; hooks and helpers live in
+  `.ts` files so edits update instantly without losing page state.
+- **Security on the frontend** — no tokens in JavaScript (httpOnly cookie), `?next=` redirects
+  restricted to our own paths (no open redirect), cached personal data cleared on logout.
+
 ## Roadmap
 
 - [x] **Phase 0** — Foundations: git, TypeScript monorepo, lint/format, API + web skeleton
@@ -189,7 +226,8 @@ crisislink/
       Incident), Zod validation, REST endpoints (volunteers move to Phase 2 with accounts)
 - [x] **Phase 2** — Authentication (argon2id, sessions), roles and permissions, volunteers and
       tasks, CSRF protection, rate limiting
-- [ ] **Phase 3** — Frontend rebuild: routing, TanStack Query, react-hook-form + Zod
+- [x] **Phase 3** — Frontend rebuild: public pages, volunteer task board, coordinator camp
+      management, admin panel (React Router, TanStack Query, react-hook-form + Zod)
 - [ ] **Phase 4** — Real-time updates (Socket.IO) and maps (Leaflet + PostGIS)
 - [ ] **Phase 5** — Offline-first PWA, SMS alerts
 - [ ] **Phase 6** — Tests (Vitest, Playwright), Docker, CI/CD, deployment, monitoring

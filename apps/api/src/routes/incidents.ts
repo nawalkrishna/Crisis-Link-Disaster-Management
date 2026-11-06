@@ -30,10 +30,13 @@ function forViewer(incident: Incident, staff: boolean) {
 }
 
 incidentsRouter.get('/incidents', async (req, res) => {
-  const { limit, offset, district, status, severity } = parse(listIncidentsQuerySchema, req.query);
+  const { limit, offset, district, status, severity, active } = parse(
+    listIncidentsQuerySchema,
+    req.query,
+  );
   const where: Prisma.IncidentReportWhereInput = {
     ...(district && { district: { slug: district } }),
-    ...(status && { status }),
+    ...(status ? { status } : active && { status: { in: ['REPORTED', 'VERIFIED'] } }),
     ...(severity && { severity }),
   };
   const [items, total] = await prisma.$transaction([
