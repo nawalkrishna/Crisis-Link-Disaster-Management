@@ -26,6 +26,7 @@ interface RequestOptions {
   body?: unknown;
   query?: Record<string, QueryValue>;
   signal?: AbortSignal;
+  headers?: Record<string, string>;
 }
 
 /** In production the API may live on another origin: set VITE_API_URL at build time. */
@@ -41,7 +42,7 @@ export function setExtraHeaders(fn: () => Record<string, string>) {
 }
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, query, signal } = options;
+  const { method = 'GET', body, query, signal, headers } = options;
 
   const url = new URL(`${API_BASE}/api${path}`, window.location.origin);
   for (const [key, value] of Object.entries(query ?? {})) {
@@ -57,6 +58,7 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
       headers: {
         ...(body !== undefined && { 'content-type': 'application/json' }),
         ...(method !== 'GET' && extraHeaders()), // only writes need it; keeps GETs preflight-free
+        ...headers,
       },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal,

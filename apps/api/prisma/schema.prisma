@@ -20,13 +20,14 @@ datasource db {
 // ---------- Geography ----------
 
 model District {
-  id         Int                @id @default(autoincrement())
-  slug       String             @unique
-  name       String             @unique
-  camps      ReliefCamp[]
-  incidents  IncidentReport[]
-  volunteers VolunteerProfile[]
-  tasks      VolunteerTask[]
+  id                 Int                 @id @default(autoincrement())
+  slug               String              @unique
+  name               String              @unique
+  camps              ReliefCamp[]
+  incidents          IncidentReport[]
+  volunteers         VolunteerProfile[]
+  tasks              VolunteerTask[]
+  alertSubscriptions AlertSubscription[]
 
   @@map("districts")
 }
@@ -202,6 +203,8 @@ model IncidentReport {
   createdAt     DateTime       @default(now()) @map("created_at")
   updatedAt     DateTime       @updatedAt @map("updated_at")
 
+  smsMessages SmsMessage[]
+
   @@index([status, severity])
   @@index([districtId])
   @@map("incident_reports")
@@ -339,4 +342,84 @@ model VolunteerTask {
   @@index([assigneeId])
   @@index([campId])
   @@map("volunteer_tasks")
+}
+
+// ---------- Offline replays ----------
+
+/// "Idempotency-Key" header records (see src/lib/idempotency.ts). A phone that was offline may
+/// send the same request twice (once lost in a tunnel, once on reconnect): the second time we
+/// return the stored response instead of creating a duplicate incident or check-in.
+model IdempotencyKey {
+  key         String   @id
+  /// SHA-256 of method + path + user + body: reusing a key for a DIFFERENT request is an error.
+  fingerprint String
+  /// null while the first request is still running.
+  statusCode  Int?     @map("status_code")
+  response    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  expiresAt   DateTime @map("expires_at")
+
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}
+
+// ---------- SMS alerts ----------
+
+/// A phone number that wants alerts for one district. Double opt-in: it only receives
+/// alerts after proving it owns the number with a one-time code (OTP).
+model AlertSubscription {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  /// E.164 format, e.g. +919400000001
+  phone           String
+  districtId      Int       @map("district_id")
+  district        District  @relation(fields: [districtId], references: [id])
+  verifiedAt      DateTime? @map("verified_at")
+  /// SHA-256 of the current one-time code (never the code itself).
+  otpHash         String?   @map("otp_hash")
+  otpExpiresAt    DateTime? @map("otp_expires_at")
+  otpAttempts     Int       @default(0) @map("otp_attempts")
+  /// Random code in every alert's "stop" link.
+  unsubscribeCode String    @unique @map("unsubscribe_code")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@unique([phone, districtId])
+  @@index([districtId, verifiedAt])
+  @@map("alert_subscriptions")
+}
+
+enum SmsPurpose {
+  OTP
+  INCIDENT_ALERT
+}
+
+enum SmsStatus {
+  QUEUED
+  SENDING
+  SENT
+  FAILED
+}
+
+/// OUTBOX: messages are written here (in the same transaction as the change that causes them)
+/// and a background worker sends them, retrying failures. See src/sms/worker.ts.
+model SmsMessage {
+  id            String          @id @default(uuid(7)) @db.Uuid
+  to            String
+  body          String
+  purpose       SmsPurpose
+  status        SmsStatus       @default(QUEUED)
+  attempts      Int             @default(0)
+  nextAttemptAt DateTime        @default(now()) @map("next_attempt_at")
+  lastError     String?         @map("last_error")
+  providerId    String?         @map("provider_id")
+  incidentId    String?         @map("incident_id") @db.Uuid
+  incident      IncidentReport? @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+  sentAt        DateTime?       @map("sent_at")
+
+  /// Fan-out is idempotent: one phone never gets two alerts for the same incident.
+  @@unique([incidentId, to])
+  @@index([status, nextAttemptAt])
+  @@index([to, purpose, createdAt])
+  @@map("sms_messages")
 }

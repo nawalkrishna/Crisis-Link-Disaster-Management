@@ -9,6 +9,7 @@ import { prisma } from '../db';
 import type { Prisma } from '../generated/prisma/client';
 import { assertCampAccess } from '../auth/policies';
 import { conflict, notFound, parse } from '../lib/http';
+import { idempotent } from '../lib/idempotency';
 import { publish } from '../realtime';
 
 /**
@@ -43,7 +44,7 @@ evacueesRouter.get('/camps/:id/evacuees', async (req, res) => {
  * inside a transaction: the second request waits until the first one commits,
  * then sees the up-to-date count.
  */
-evacueesRouter.post('/camps/:id/evacuees', async (req, res) => {
+evacueesRouter.post('/camps/:id/evacuees', idempotent, async (req, res) => {
   const { id: campId } = parse(idParamSchema, req.params);
   assertCampAccess(req.user, campId);
   const data = parse(createEvacueeSchema, req.body);

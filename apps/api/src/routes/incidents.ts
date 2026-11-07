@@ -9,7 +9,9 @@ import { prisma } from '../db';
 import type { Prisma } from '../generated/prisma/client';
 import { isStaff, requireStaff } from '../auth/policies';
 import { notFound, parse } from '../lib/http';
+import { idempotent } from '../lib/idempotency';
 import { publicSubmitLimiter } from '../lib/security';
+import { queueIncidentAlerts } from '../sms/alerts';
 import { publish } from '../realtime';
 
 export const incidentsRouter = Router();
@@ -65,7 +67,8 @@ incidentsRouter.get('/incidents/:id', async (req, res) => {
 });
 
 /** Anyone can report an incident - no login in an emergency. Rate-limited against spam. */
-incidentsRouter.post('/incidents', publicSubmitLimiter, async (req, res) => {
+// `idempotent` runs before the rate limit, so a replayed offline report doesn't count twice.
+incidentsRouter.post('/incidents', idempotent, publicSubmitLimiter, async (req, res) => {
   const { district, ...data } = parse(createIncidentSchema, req.body);
   const incident = await prisma.incidentReport.create({
     data: { ...data, district: { connect: { slug: district } } },
@@ -87,11 +90,30 @@ incidentsRouter.post('/incidents', publicSubmitLimiter, async (req, res) => {
 incidentsRouter.patch('/incidents/:id', requireStaff, async (req, res) => {
   const { id } = parse(idParamSchema, req.params);
   const data = parse(updateIncidentSchema, req.body);
-  const incident = await prisma.incidentReport.update({
-    where: { id },
-    data,
-    include: incidentInclude,
+
+  const { incident, alertsQueued } = await prisma.$transaction(async (tx) => {
+    const incident = await tx.incidentReport.update({
+      where: { id },
+      data,
+      include: { district: { select: { id: true, slug: true, name: true } } },
+    });
+    // SMS alerts go out only for incidents a staff member has VERIFIED (no false alarms from
+    // unchecked public reports) and only when they're serious. Queued in this same transaction
+    // (outbox pattern); the unique (incident, phone) index means re-saving never re-sends.
+    const alertsQueued =
+      incident.status === 'VERIFIED' &&
+      (incident.severity === 'HIGH' || incident.severity === 'CRITICAL')
+        ? await queueIncidentAlerts(tx, {
+            ...incident,
+            districtId: incident.district.id,
+            districtName: incident.district.name,
+            districtSlug: incident.district.slug,
+          })
+        : 0;
+    return { incident, alertsQueued };
   });
+
   publish(req, { type: 'incident.changed', incidentId: id });
-  res.json(incident);
+  const { district, ...rest } = incident;
+  res.json({ ...rest, district: { slug: district.slug, name: district.name }, alertsQueued });
 });

@@ -2,11 +2,13 @@ import { createServer } from 'node:http';
 import { createApp } from './app';
 import { config } from './config';
 import { attachRealtime, closeRealtime } from './realtime';
+import { startBackgroundWorker, stopBackgroundWorker } from './sms/worker';
 
 // Express handles normal requests; Socket.IO shares the same HTTP server (and port)
 // and takes over connections to /socket.io/.
 const server = createServer(createApp());
 attachRealtime(server);
+startBackgroundWorker(); // sends queued SMS, cleans up old idempotency keys
 
 server.listen(config.port, () => {
   console.log(`CrisisLink API listening on http://localhost:${config.port}`);
@@ -16,6 +18,7 @@ server.listen(config.port, () => {
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
     console.log(`${signal} received, shutting down...`);
+    stopBackgroundWorker();
     void closeRealtime().then(() => server.close(() => process.exit(0)));
   });
 }

@@ -9,6 +9,7 @@ import { prisma } from '../db';
 import type { Prisma } from '../generated/prisma/client';
 import { assertCampAccess, isActive, requireStaff } from '../auth/policies';
 import { conflict, forbidden, notFound, parse } from '../lib/http';
+import { idempotent } from '../lib/idempotency';
 import { publicSubmitLimiter } from '../lib/security';
 import { publish } from '../realtime';
 
@@ -42,7 +43,7 @@ donationsRouter.get('/donations', requireStaff, async (req, res) => {
 });
 
 /** Anyone (no login) can pledge items, optionally for a specific camp need. Rate-limited. */
-donationsRouter.post('/donations', publicSubmitLimiter, async (req, res) => {
+donationsRouter.post('/donations', idempotent, publicSubmitLimiter, async (req, res) => {
   const { needId, campId, ...data } = parse(createDonationSchema, req.body);
 
   let resolvedCampId = campId;

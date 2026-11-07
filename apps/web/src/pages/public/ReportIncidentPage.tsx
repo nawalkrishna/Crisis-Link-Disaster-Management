@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CheckCircle2, LocateFixed, PhoneCall } from 'lucide-react';
+import { CheckCircle2, CloudOff, LocateFixed, PhoneCall } from 'lucide-react';
 import { INCIDENT_TYPES, PRIORITIES, createIncidentSchema } from '@crisislink/shared';
 import { DistrictOptions } from '../../components/filters';
 import { LocationPicker } from '../../components/map';
@@ -19,6 +19,7 @@ import { useCurrentUser } from '../../lib/auth';
 import { applyServerErrors, emptyToUndefined, useZodForm } from '../../lib/forms';
 import { humanize } from '../../lib/format';
 import { useGeolocation } from '../../lib/geolocation';
+import { queueable } from '../../lib/offline';
 import { useReportIncident } from '../../lib/queries';
 
 export default function ReportIncidentPage() {
@@ -46,21 +47,34 @@ export default function ReportIncidentPage() {
 
   const onSubmit = handleSubmit((values) => {
     setFormError(null);
-    report.mutate(values, { onError: (err) => setFormError(applyServerErrors(err, setError)) });
+    // queueable() gives this report a unique id, so sending it twice can't create two reports.
+    report.mutate(queueable(values), {
+      onError: (err) => setFormError(applyServerErrors(err, setError)),
+    });
   });
 
-  if (report.isSuccess) {
+  // isPaused = no connection: the report waits on this device and sends itself later.
+  // This screen then switches to "Report received" by itself once it gets through.
+  if (report.isSuccess || report.isPaused) {
     return (
       <Card className="mx-auto max-w-lg text-center">
-        <CheckCircle2 className="mx-auto size-10 text-emerald-600" aria-hidden />
-        <h1 className="mt-3 text-xl font-bold">Report received</h1>
+        {report.isSuccess ? (
+          <CheckCircle2 className="mx-auto size-10 text-emerald-600" aria-hidden />
+        ) : (
+          <CloudOff className="mx-auto size-10 text-amber-600" aria-hidden />
+        )}
+        <h1 className="mt-3 text-xl font-bold" role="status">
+          {report.isSuccess ? 'Report received' : 'Saved - waiting for a connection'}
+        </h1>
         <p className="mt-2 text-slate-600">
-          Coordinators in {report.data.district.name} can see it now. If anyone is in immediate
-          danger, also call{' '}
+          {report.isSuccess
+            ? `Coordinators in ${report.data.district.name} can see it now.`
+            : 'You are offline. Your report is stored on this device and will be sent automatically as soon as there is signal - you can close this page.'}{' '}
+          If anyone is in immediate danger, call{' '}
           <a href="tel:112" className="font-semibold underline">
             112
-          </a>
-          .
+          </a>{' '}
+          (calls often work when data doesn&rsquo;t).
         </p>
         <div className="mt-6 flex justify-center gap-3">
           <ButtonLink to="/incidents" variant="secondary">

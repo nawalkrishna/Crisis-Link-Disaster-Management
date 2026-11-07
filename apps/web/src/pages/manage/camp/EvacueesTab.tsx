@@ -23,6 +23,7 @@ import {
   useZodForm,
 } from '../../../lib/forms';
 import { formatDateTime, humanize } from '../../../lib/format';
+import { queueable, useOnline } from '../../../lib/offline';
 import { useCheckIn, useCheckOut, useEvacuees } from '../../../lib/queries';
 
 const LIMIT = 25;
@@ -207,7 +208,8 @@ function CheckInFields({
   onDone: () => void;
   onCheckedIn: (homeAddress?: string) => void;
 }) {
-  const checkIn = useCheckIn(campId);
+  const checkIn = useCheckIn();
+  const online = useOnline();
   const toast = useToast();
   const [formError, setFormError] = useState<string | null>(null);
   const { register, handleSubmit, formState, setError } = useZodForm(createEvacueeSchema, {
@@ -218,13 +220,19 @@ function CheckInFields({
 
   const onSubmit = handleSubmit((values) => {
     setFormError(null);
-    checkIn.mutate(values, {
+    checkIn.mutate(queueable({ ...values, campId }), {
       onSuccess: (p) => {
         toast(`${p.fullName} checked in`);
         onCheckedIn(values.homeAddress);
       },
       onError: (err) => setFormError(applyServerErrors(err, setError)),
     });
+    // Offline: the check-in waits in the outbox and is sent automatically later
+    // (capacity is still enforced by the server then). Free the form for the next person.
+    if (!online) {
+      toast(`${values.fullName} saved on this device - will be checked in when back online`);
+      onCheckedIn(values.homeAddress);
+    }
   });
 
   return (

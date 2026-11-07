@@ -64,3 +64,5 @@ export const loginLimiter = limiter({ windowMinutes: 15, limit: 10, onlyFailures
 /** Sign-ups and public reports: generous for real people, painful for bots. */
 export const registerLimiter = limiter({ windowMinutes: 60, limit: 10 });
 export const publicSubmitLimiter = limiter({ windowMinutes: 60, limit: 30 });
+/** SMS cost money and reach real phones: keep sign-up attempts per IP low. */
+export const alertSignupLimiter = limiter({ windowMinutes: 60, limit: 20 });

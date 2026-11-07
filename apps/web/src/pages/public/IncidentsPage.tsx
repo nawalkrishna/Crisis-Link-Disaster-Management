@@ -14,7 +14,7 @@ import {
 } from '../../components/ui';
 import { errorMessage } from '../../lib/api';
 import { isStaff, useCurrentUser } from '../../lib/auth';
-import { humanize } from '../../lib/format';
+import { humanize, pluralize } from '../../lib/format';
 import { useIncidents, useUpdateIncident } from '../../lib/queries';
 
 const LIMIT = 20;
@@ -48,7 +48,13 @@ export default function IncidentsPage() {
     update.mutate(
       { id, status },
       {
-        onSuccess: () => toast(`Marked as ${humanize(status).toLowerCase()}`),
+        onSuccess: (incident) =>
+          toast(
+            `Marked as ${humanize(status).toLowerCase()}` +
+              (incident.alertsQueued > 0
+                ? ` - SMS alert going to ${pluralize(incident.alertsQueued, 'subscriber')}`
+                : ''),
+          ),
         onError: (err) => toast(errorMessage(err), 'error'),
       },
     );

@@ -57,6 +57,10 @@ const STATUS_TONES: Record<string, Tone> = {
   REPORTED: 'warning',
   VERIFIED: 'danger', // a confirmed, still-active incident
   SUSPENDED: 'danger',
+  SENT: 'success',
+  QUEUED: 'info',
+  SENDING: 'info',
+  FAILED: 'danger',
 };
 export const statusTone = (status: string): Tone => STATUS_TONES[status] ?? 'neutral';
 

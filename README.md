@@ -26,16 +26,30 @@ Requires **Node.js 22.12+** (see `.nvmrc`) and **PostgreSQL 15+**.
    npm run dev        # API on http://localhost:4000, web on http://localhost:5173
    ```
 
-Open http://localhost:5173. The footer should say **Online**.
+Open http://localhost:5173. The footer should say **Live**.
+
+### Trying the offline app and SMS alerts
+
+- **Offline / installable app**: the service worker is only active in the production build.
+  Run `npm run build -w @crisislink/web` then `npm run preview -w @crisislink/web` and open
+  http://localhost:4173 (the API must be running). Visit once, then in DevTools → Network choose
+  "Offline" and reload: the app still opens, shows the last data it saw, and queues incident
+  reports and camp check-ins until you go back online. Chrome offers "Install app" in the address
+  bar.
+- **SMS alerts**: with `SMS_PROVIDER=console` (the default) no real SMS is sent; messages are
+  printed in the API terminal. Sign up at `/alerts`, copy the 6-digit code from the terminal, then
+  verify a HIGH or CRITICAL incident in that district as staff and watch the alert appear. Admins
+  can follow every message at `/admin/sms`. For real SMS set `SMS_PROVIDER=twilio` and the
+  `TWILIO_*` variables (see `apps/api/.env.example`).
 
 ### What each role can do in the web app
 
 | Who         | Pages                                                                                                                          |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Anyone      | Dashboard, districts, camps, needs (`/needs`), pledge a donation, incidents, report one                                        |
+| Anyone      | Dashboard, districts, camps, needs (`/needs`), pledge a donation, incidents, report one, SMS alerts (`/alerts`)                |
 | Volunteer   | Sign up (`/register`), task board (`/tasks`: available + mine), account                                                        |
 | Coordinator | `/manage`: their camps → people check-in/out, needs, incoming donations, tasks, settings; approve volunteers; verify incidents |
-| Admin       | Everything above for all camps, plus `/admin/users` (roles, suspension, camp assignment) and opening new camps                 |
+| Admin       | Everything above for all camps, plus `/admin/users` (roles, suspension, camp assignment), opening new camps, `/admin/sms`      |
 
 **Sample accounts** (development only): when `DEV_SEED_PASSWORD` is set in `apps/api/.env`,
 the seed creates `admin@`, `coordinator@`, `volunteer@` and `pending@crisislink.test`, all with
@@ -46,20 +60,21 @@ server run `npm run make-admin -- you@example.com`.
 
 ## Scripts (run from the repo root)
 
-| Command                          | What it does                                              |
-| -------------------------------- | --------------------------------------------------------- |
-| `npm run dev`                    | Runs API and web together (`concurrently`)                |
-| `npm run build`                  | Production build of every workspace                       |
-| `npm run typecheck`              | `tsc` type-check of every workspace                       |
-| `npm run lint`                   | ESLint across the whole repo (`lint:fix` to auto-fix)     |
-| `npm run format`                 | Prettier formats every file (`format:check` only reports) |
-| `npm run check`                  | format check + lint + typecheck — run before committing   |
-| `npm run db:migrate`             | Create a migration from schema changes and apply it       |
-| `npm run db:seed`                | Insert districts and (in development) sample data         |
-| `npm run db:reset`               | Drop everything, re-run all migrations (dev only!)        |
-| `npm run db:studio`              | Prisma Studio: browse and edit data in the browser        |
-| `npm run make-admin -- <email>`  | Promote a registered user to an active admin              |
-| `npm run dev -w @crisislink/api` | Run a script in just one workspace                        |
+| Command                              | What it does                                              |
+| ------------------------------------ | --------------------------------------------------------- |
+| `npm run dev`                        | Runs API and web together (`concurrently`)                |
+| `npm run build`                      | Production build of every workspace                       |
+| `npm run typecheck`                  | `tsc` type-check of every workspace                       |
+| `npm run lint`                       | ESLint across the whole repo (`lint:fix` to auto-fix)     |
+| `npm run format`                     | Prettier formats every file (`format:check` only reports) |
+| `npm run check`                      | format check + lint + typecheck — run before committing   |
+| `npm run db:migrate`                 | Create a migration from schema changes and apply it       |
+| `npm run db:seed`                    | Insert districts and (in development) sample data         |
+| `npm run db:reset`                   | Drop everything, re-run all migrations (dev only!)        |
+| `npm run db:studio`                  | Prisma Studio: browse and edit data in the browser        |
+| `npm run make-admin -- <email>`      | Promote a registered user to an active admin              |
+| `npm run dev -w @crisislink/api`     | Run a script in just one workspace                        |
+| `npm run preview -w @crisislink/web` | Serve the production build (with service worker) on :4173 |
 
 ## API
 
@@ -71,38 +86,48 @@ Request bodies must be JSON. Logging in sets an httpOnly `cl_session` cookie.
 **Who** column: _public_ = no login, _user_ = any logged-in user, _staff_ = active admin or
 coordinator, _camp staff_ = admin or a coordinator of that camp, _admin_ = active admin.
 
-| Method & path                               | Who              | Purpose                                                 |
-| ------------------------------------------- | ---------------- | ------------------------------------------------------- |
-| `GET /health`                               | public           | API + database status                                   |
-| `GET /stats`                                | public           | Dashboard numbers (camps, evacuees, needs, incidents)   |
-| `GET /districts`, `/districts/:slug`        | public           | Per-district camp, evacuee and incident counts          |
-| `POST /auth/register`                       | public           | Volunteer sign-up (starts PENDING)                      |
-| `POST /auth/login`, `/auth/logout`          | public           | Start / end a session (failed logins are rate-limited)  |
-| `GET, PATCH /auth/me`                       | user             | Own account and volunteer profile                       |
-| `POST /auth/change-password`                | user             | Also logs out all other devices                         |
-| `GET /users`, `PATCH /users/:id`            | admin            | List accounts / approve, suspend, change role           |
-| `PUT /users/:id/camps`                      | admin            | Set which camps a coordinator manages                   |
-| `GET /volunteers`                           | staff            | Active volunteers (`district`, `skill`, `available`)    |
-| `POST /volunteers/:id/approve`              | staff            | Approve a pending volunteer                             |
-| `GET /camps`, `/camps/:id`                  | public           | Camps with live occupancy                               |
-| `GET /camps/nearby?lat=&lng=`               | public           | Closest camps with space (`radiusKm`, `hasSpace`)       |
-| `GET /map`                                  | public           | Camp + active incident markers (`district` filter)      |
-| `POST /camps`                               | admin            | Open a camp                                             |
-| `PATCH /camps/:id`                          | camp staff       | Update a camp                                           |
-| `GET, POST /camps/:id/evacuees`             | camp staff       | People in a camp / check someone in (capacity enforced) |
-| `PATCH /evacuees/:id`                       | camp staff       | Update details or `{ "checkedOut": true }`              |
-| `GET /needs`, `/camps/:id/needs`            | public           | Open needs, most urgent first                           |
-| `POST /camps/:id/needs`, `PATCH /needs/:id` | camp staff       | Add / update a need                                     |
-| `POST /donations`                           | public           | Pledge a donation (optionally for a `needId`)           |
-| `GET /donations`                            | staff            | Coordinators see only their camps' donations            |
-| `PATCH /donations/:id`                      | camp staff       | `{ "status": "RECEIVED" }` updates the need's total     |
-| `GET /incidents`, `/incidents/:id`          | public           | Reporter name/phone only shown to staff                 |
-| `POST /incidents`                           | public           | Report an incident (rate-limited)                       |
-| `PATCH /incidents/:id`                      | staff            | Verify, resolve or dismiss                              |
-| `GET /tasks`                                | user             | Volunteers: open + own tasks; staff: all (`mine=true`)  |
-| `POST /tasks`                               | staff            | Coordinators for their camps; admins also field tasks   |
-| `POST /tasks/:id/claim`                     | volunteer        | Active volunteer takes an open task (skill checked)     |
-| `PATCH /tasks/:id`                          | assignee / staff | Move through the task state machine, edit, assign       |
+| Method & path                                                | Who              | Purpose                                                 |
+| ------------------------------------------------------------ | ---------------- | ------------------------------------------------------- |
+| `GET /health`                                                | public           | API + database status                                   |
+| `GET /stats`                                                 | public           | Dashboard numbers (camps, evacuees, needs, incidents)   |
+| `GET /districts`, `/districts/:slug`                         | public           | Per-district camp, evacuee and incident counts          |
+| `POST /auth/register`                                        | public           | Volunteer sign-up (starts PENDING)                      |
+| `POST /auth/login`, `/auth/logout`                           | public           | Start / end a session (failed logins are rate-limited)  |
+| `GET, PATCH /auth/me`                                        | user             | Own account and volunteer profile                       |
+| `POST /auth/change-password`                                 | user             | Also logs out all other devices                         |
+| `GET /users`, `PATCH /users/:id`                             | admin            | List accounts / approve, suspend, change role           |
+| `PUT /users/:id/camps`                                       | admin            | Set which camps a coordinator manages                   |
+| `GET /volunteers`                                            | staff            | Active volunteers (`district`, `skill`, `available`)    |
+| `POST /volunteers/:id/approve`                               | staff            | Approve a pending volunteer                             |
+| `GET /camps`, `/camps/:id`                                   | public           | Camps with live occupancy                               |
+| `GET /camps/nearby?lat=&lng=`                                | public           | Closest camps with space (`radiusKm`, `hasSpace`)       |
+| `GET /map`                                                   | public           | Camp + active incident markers (`district` filter)      |
+| `POST /camps`                                                | admin            | Open a camp                                             |
+| `PATCH /camps/:id`                                           | camp staff       | Update a camp                                           |
+| `GET, POST /camps/:id/evacuees`                              | camp staff       | People in a camp / check someone in (capacity enforced) |
+| `PATCH /evacuees/:id`                                        | camp staff       | Update details or `{ "checkedOut": true }`              |
+| `GET /needs`, `/camps/:id/needs`                             | public           | Open needs, most urgent first                           |
+| `POST /camps/:id/needs`, `PATCH /needs/:id`                  | camp staff       | Add / update a need                                     |
+| `POST /donations`                                            | public           | Pledge a donation (optionally for a `needId`)           |
+| `GET /donations`                                             | staff            | Coordinators see only their camps' donations            |
+| `PATCH /donations/:id`                                       | camp staff       | `{ "status": "RECEIVED" }` updates the need's total     |
+| `GET /incidents`, `/incidents/:id`                           | public           | Reporter name/phone only shown to staff                 |
+| `POST /incidents`                                            | public           | Report an incident (rate-limited)                       |
+| `PATCH /incidents/:id`                                       | staff            | Verify, resolve or dismiss                              |
+| `GET /tasks`                                                 | user             | Volunteers: open + own tasks; staff: all (`mine=true`)  |
+| `POST /tasks`                                                | staff            | Coordinators for their camps; admins also field tasks   |
+| `POST /tasks/:id/claim`                                      | volunteer        | Active volunteer takes an open task (skill checked)     |
+| `PATCH /tasks/:id`                                           | assignee / staff | Move through the task state machine, edit, assign       |
+| `POST /alerts/subscribe`                                     | public           | Phone + district → texts a 6-digit code (rate-limited)  |
+| `POST /alerts/verify`                                        | public           | Confirm the code → alerts on                            |
+| `GET /alerts/subscription/:code`, `POST /alerts/unsubscribe` | public           | "Stop alerts" link in every SMS                         |
+| `GET /admin/sms`, `/admin/alerts/stats`                      | admin            | SMS outbox log, subscribers per district                |
+
+`POST /incidents`, `POST /donations` and `POST /camps/:id/evacuees` accept an optional
+`Idempotency-Key: <uuid>` header: repeating a request with the same key returns the first
+response (header `Idempotent-Replayed: true`) instead of creating a duplicate. Verifying a
+HIGH/CRITICAL incident (`PATCH /incidents/:id`) queues SMS alerts; the response includes
+`alertsQueued`.
 
 ### Live updates (Socket.IO)
 
@@ -122,9 +147,10 @@ crisislink/
 │   ├── api/          Express 5 + TypeScript REST API (dev: node --watch + tsx, build: tsup)
 │   │   ├── prisma/       schema.prisma, migrations/, seed.ts
 │   │   └── src/          app.ts, realtime.ts (Socket.IO), routes/, auth/ (sessions,
-│   │                     policies), lib/, scripts/, db.ts
+│   │                     policies), sms/ (provider, outbox worker), lib/, scripts/, db.ts
 │   └── web/          React 19 + Vite + Tailwind CSS v4
-│       └── src/          router.tsx, lib/ (api client, queries, auth, forms, socket, live),
+│       └── src/          router.tsx, lib/ (api client, queries, auth, forms, socket, live,
+│                         offline outbox, persisted cache),
 │                         components/ (UI kit, layout, domain cards, map/), pages/ (public,
 │                         auth, volunteer, manage, admin)
 ├── packages/
@@ -259,6 +285,46 @@ crisislink/
 - **Geolocation API** — "find camps near me" and "use my location" ask permission and read the
   position once (no tracking); a map click or drag is the fallback.
 
+## Concepts introduced in Phase 5
+
+- **Progressive Web App** — a web manifest (name, icons, colours) makes the site installable on a
+  phone's home screen; a **service worker** (generated by Workbox via `vite-plugin-pwa`) serves
+  the app's files from a local cache, so it opens with no signal at all.
+- **Precaching vs runtime caching** — every built file (including lazy page chunks and Leaflet) is
+  downloaded once in the background, so even pages you never visited work offline; map tiles are
+  cached as you look at them (cache-first, with a size and age limit).
+- **Update flow** — a new deploy installs in the background, but the running version is only
+  replaced when the user clicks "Reload", so nobody loses a half-filled form.
+- **Persisted query cache** — TanStack Query's cache is saved to **IndexedDB** and restored on
+  start-up, with a version "buster" and a maximum age. Only public data is written to disk;
+  evacuee lists, donor phones and incident reporter details stay in memory and vanish on logout.
+- **Offline mutations ("outbox")** — writes made offline are _paused_, saved with the cache and
+  resumed on reconnect. Their send functions are registered as **mutation defaults** so they can
+  be resumed after a reload. Rejected replays (e.g. the camp filled up meanwhile) are shown with
+  the reason and can be retried or discarded — nothing fails silently.
+- **Idempotency keys** — the client gives each action a UUID and re-sends it on every retry; the
+  server stores the first response and replays it, so a request that "failed" after the server
+  had saved it can't create a duplicate. A key reused for a different request is rejected (422).
+- **`navigator.onLine` is a hint** — the app reads it at start-up and listens for changes, but
+  also retries network errors with exponential backoff, because "connected to Wi-Fi" doesn't mean
+  "connected to the internet".
+- **Transactional outbox** — SMS rows are inserted in the same database transaction as the change
+  that causes them; a background worker sends them. No lost alerts when the SMS gateway is down,
+  and the HTTP request never waits for it.
+- **Job queue in PostgreSQL** — `FOR UPDATE SKIP LOCKED` lets several servers share the queue
+  without sending a message twice; retries use **exponential backoff with jitter**; delivery is
+  _at-least-once_ (a crash mid-send can cause a rare duplicate, never a lost alert).
+- **Set-based fan-out** — one `INSERT ... SELECT` queues an alert for every subscriber of a
+  district, and a unique `(incident, phone)` index makes it safe to run twice.
+- **Double opt-in & OTP security** — codes come from a CSPRNG, are stored hashed, expire in
+  10 minutes, allow 5 guesses (counted atomically), are compared in constant time and are redacted
+  after sending; sign-ups are limited per IP and per phone number.
+- **Safe unsubscribe links** — the link opens a page with a button (a POST), because messaging
+  apps fetch links to build previews and would otherwise unsubscribe people.
+- **Ports and adapters** — the SMS provider is an interface with a console adapter for
+  development and a Twilio adapter (plain `fetch`, no SDK) for production. Real SMS in India also
+  needs TRAI DLT registration of the sender ID and message templates.
+
 ## Roadmap
 
 - [x] **Phase 0** — Foundations: git, TypeScript monorepo, lint/format, API + web skeleton
@@ -269,6 +335,7 @@ crisislink/
 - [x] **Phase 3** — Frontend rebuild: public pages, volunteer task board, coordinator camp
       management, admin panel (React Router, TanStack Query, react-hook-form + Zod)
 - [x] **Phase 4** — Real-time updates (Socket.IO), maps (Leaflet), nearest camp with space
-- [ ] **Phase 5** — Offline-first PWA, SMS alerts
+- [x] **Phase 5** — Offline-first PWA (service worker, persisted cache, outbox, idempotency),
+      SMS alerts (double opt-in, transactional outbox, retrying worker)
 - [ ] **Phase 6** — Tests (Vitest, Playwright), Docker, CI/CD, deployment, monitoring
 - [ ] **Phase 7** — AI report triage, Malayalam i18n, analytics

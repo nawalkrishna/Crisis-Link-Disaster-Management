@@ -28,6 +28,8 @@ export const router = createBrowserRouter([
       { path: 'report', lazy: page(() => import('./pages/public/ReportIncidentPage')) },
       { path: 'login', lazy: page(() => import('./pages/auth/LoginPage')) },
       { path: 'register', lazy: page(() => import('./pages/auth/RegisterPage')) },
+      { path: 'alerts', lazy: page(() => import('./pages/public/AlertsPage')) },
+      { path: 'u/:code', lazy: page(() => import('./pages/public/UnsubscribePage')) },
 
       // "Pathless layout routes" group pages behind a guard without adding to the URL.
       // Any logged-in user (pending volunteers too):
@@ -53,6 +55,7 @@ export const router = createBrowserRouter([
         children: [
           { path: 'admin/users', lazy: page(() => import('./pages/admin/UsersPage')) },
           { path: 'admin/camps/new', lazy: page(() => import('./pages/admin/NewCampPage')) },
+          { path: 'admin/sms', lazy: page(() => import('./pages/admin/SmsLogPage')) },
         ],
       },
 

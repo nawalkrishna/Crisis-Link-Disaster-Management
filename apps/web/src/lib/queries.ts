@@ -4,8 +4,6 @@ import type {
   CampSummary,
   CreateCampInput,
   CreateDonationInput,
-  CreateEvacueeInput,
-  CreateIncidentInput,
   CreateNeedInput,
   CreateTaskInput,
   CurrentUser,
@@ -30,8 +28,14 @@ import type {
   Priority,
   MapResponse,
   NearbyCamp,
+  AlertStats,
+  SmsLogItem,
+  SubscribeAlertsInput,
+  SubscribeAlertsResponse,
+  VerifyAlertsInput,
 } from '@crisislink/shared';
 import { api } from './api';
+import { offlineKeys, type CheckInVars, type ReportIncidentVars } from './offline';
 import { meKey } from './auth';
 
 /**
@@ -154,21 +158,16 @@ export function usePledge() {
   });
 }
 
-export function useReportIncident() {
-  const invalidate = useInvalidate();
-  return useMutation({
-    mutationFn: (input: CreateIncidentInput) =>
-      api<Incident>('/incidents', { method: 'POST', body: input }),
-    onSuccess: () => invalidate('incidents', 'stats', 'districts'),
-  });
-}
+/** Queueable offline: the request function and cache refresh live in lib/offline.ts. */
+export const useReportIncident = () =>
+  useMutation<Incident, Error, ReportIncidentVars>({ mutationKey: offlineKeys.reportIncident });
 
 export function useUpdateIncident() {
   const invalidate = useInvalidate();
   return useMutation({
     mutationFn: ({ id, ...body }: { id: string; status?: IncidentStatus; severity?: Priority }) =>
-      api<Incident>(`/incidents/${id}`, { method: 'PATCH', body }),
-    onSuccess: () => invalidate('incidents', 'stats', 'districts'),
+      api<Incident & { alertsQueued: number }>(`/incidents/${id}`, { method: 'PATCH', body }),
+    onSuccess: () => invalidate('incidents', 'stats', 'districts', 'map'),
   });
 }
 
@@ -190,14 +189,9 @@ export function useUpdateCamp(id: string) {
   });
 }
 
-export function useCheckIn(campId: string) {
-  const invalidate = useInvalidate();
-  return useMutation({
-    mutationFn: (input: CreateEvacueeInput) =>
-      api<Evacuee>(`/camps/${campId}/evacuees`, { method: 'POST', body: input }),
-    onSuccess: () => invalidate('evacuees', 'camps', 'stats', 'districts'),
-  });
-}
+/** Queueable offline (see lib/offline.ts). */
+export const useCheckIn = () =>
+  useMutation<Evacuee, Error, CheckInVars>({ mutationKey: offlineKeys.checkIn });
 
 export function useCheckOut() {
   const invalidate = useInvalidate();
@@ -322,4 +316,47 @@ export const useNearbyCamps = (point: { latitude: number; longitude: number } | 
         query: { lat: point!.latitude, lng: point!.longitude, radiusKm: 100 },
       }).then((r) => r.items),
     enabled: point !== null,
+  });
+
+// ---------- SMS alerts ----------
+
+export const useSubscribeAlerts = () =>
+  useMutation({
+    mutationFn: (input: SubscribeAlertsInput) =>
+      api<SubscribeAlertsResponse>('/alerts/subscribe', { method: 'POST', body: input }),
+  });
+
+export const useVerifyAlerts = () =>
+  useMutation({
+    mutationFn: (input: VerifyAlertsInput) =>
+      api<{ ok: true; district: { slug: string; name: string } }>('/alerts/verify', {
+        method: 'POST',
+        body: input,
+      }),
+  });
+
+export const useAlertSubscription = (code: string) =>
+  useQuery({
+    queryKey: ['alertSubscription', code],
+    queryFn: () => api<{ phone: string; district: string }>(`/alerts/subscription/${code}`),
+  });
+
+export const useUnsubscribeAlerts = () =>
+  useMutation({
+    mutationFn: (code: string) =>
+      api<{ ok: true }>('/alerts/unsubscribe', { method: 'POST', body: { code } }),
+  });
+
+export const useSmsLog = (params: Params = {}) =>
+  useQuery({
+    queryKey: ['sms', params],
+    queryFn: () => api<Paginated<SmsLogItem>>('/admin/sms', { query: params }),
+    refetchInterval: 5000, // the worker sends in the background: watch statuses change
+  });
+
+export const useAlertStats = () =>
+  useQuery({
+    queryKey: ['sms', 'stats'],
+    queryFn: () => api<AlertStats>('/admin/alerts/stats'),
+    refetchInterval: 5000,
   });

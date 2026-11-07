@@ -1,6 +1,6 @@
 {
   "name": "@crisislink/web",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "description": "CrisisLink web app (Vite + React + TypeScript + Tailwind).",
@@ -8,12 +8,16 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "generate-pwa-assets": "pwa-assets-generator --preset minimal-2023 public/favicon.svg",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@crisislink/shared": "^0.1.0",
     "@hookform/resolvers": "^7.0.3",
-    "@tanstack/react-query": "^5.106.1",
+    "@tanstack/query-async-storage-persister": "^5.107.1",
+    "@tanstack/react-query": "^5.107.1",
+    "@tanstack/react-query-persist-client": "^5.107.1",
+    "idb-keyval": "^6.3.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.69.0",
     "react": "^19.3.1",
@@ -26,12 +30,15 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.4",
-    "@tanstack/react-query-devtools": "^5.106.1",
+    "@tanstack/react-query-devtools": "^5.107.1",
     "@types/leaflet": "^1.9.22",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@vite-pwa/assets-generator": "^2.0.0",
     "@vitejs/plugin-react": "^6.2.1",
     "tailwindcss": "^4.3.4",
-    "vite": "^8.3.6"
+    "vite": "^8.3.6",
+    "vite-plugin-pwa": "^2.0.0",
+    "workbox-window": "^7.4.1"
   }
 }

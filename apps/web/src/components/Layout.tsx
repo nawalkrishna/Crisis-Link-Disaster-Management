@@ -3,7 +3,9 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router';
 import { AlertTriangle, LogOut, Menu, UserRound, X } from 'lucide-react';
 import { isAdmin, isStaff, useCurrentUser, useLogout } from '../lib/auth';
 import { useLiveUpdates } from '../lib/live';
+import { pendingOutboxCount } from '../lib/offline';
 import { ApiStatus } from './ApiStatus';
+import { OfflineBanner, Outbox, UpdatePrompt } from './OfflineStatus';
 import { buttonClass, cn } from './styles';
 import { PageLoader } from './ui';
 
@@ -19,6 +21,7 @@ function useNavItems(): NavItem[] {
   if (isStaff(user)) items.push({ to: '/manage', label: 'Manage' });
   if (isStaff(user)) items.push({ to: '/tasks', label: 'Tasks' });
   if (isAdmin(user)) items.push({ to: '/admin/users', label: 'Users' });
+  if (isAdmin(user)) items.push({ to: '/admin/sms', label: 'SMS' });
   return items;
 }
 
@@ -39,6 +42,15 @@ export function Layout() {
 
   const onLogout = () => {
     close();
+    // Logging out clears this device's cache - including writes still waiting to be sent.
+    const unsent = pendingOutboxCount();
+    if (
+      unsent > 0 &&
+      !window.confirm(
+        `${unsent} change(s) made offline have not been sent yet. Log out and discard them?`,
+      )
+    )
+      return;
     logout.mutate(undefined, { onSettled: () => navigate('/') });
   };
 
@@ -154,6 +166,7 @@ export function Layout() {
           </nav>
         )}
       </header>
+      <OfflineBanner />
 
       {user?.status === 'PENDING' && (
         <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm text-amber-900">
@@ -171,13 +184,20 @@ export function Layout() {
 
       <footer className="border-t border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-4 text-xs text-slate-500">
-          <span>CrisisLink · Disaster relief coordination for Kerala</span>
+          <span>
+            CrisisLink · Disaster relief coordination for Kerala ·{' '}
+            <Link to="/alerts" className="underline hover:text-slate-800">
+              Get SMS alerts
+            </Link>
+          </span>
           <span className="flex items-center gap-3">
             In an emergency call <strong className="text-slate-700">112</strong>
             <ApiStatus />
           </span>
         </div>
       </footer>
+      <Outbox />
+      <UpdatePrompt />
     </div>
   );
 }

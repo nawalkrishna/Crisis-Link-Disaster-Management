@@ -8,6 +8,7 @@ import { prisma } from './db';
 import { loadSession } from './auth/session';
 import { errorHandler, notFoundHandler } from './lib/errors';
 import { requireJsonBody, verifyOrigin } from './lib/security';
+import { alertsRouter } from './routes/alerts';
 import { authRouter } from './routes/auth';
 import { campsRouter } from './routes/camps';
 import { geoRouter } from './routes/geo';
@@ -19,7 +20,7 @@ import { overviewRouter } from './routes/overview';
 import { tasksRouter } from './routes/tasks';
 import { usersRouter } from './routes/users';
 
-const VERSION = '0.4.0';
+const VERSION = '0.5.0';
 
 /**
  * Builds the Express app WITHOUT starting a server.
@@ -70,6 +71,7 @@ export function createApp() {
   api.use(donationsRouter);
   api.use(incidentsRouter);
   api.use(tasksRouter);
+  api.use(alertsRouter);
 
   app.use('/api', api);
   app.use(notFoundHandler);

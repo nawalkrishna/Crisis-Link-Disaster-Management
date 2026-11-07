@@ -55,6 +55,8 @@ export function useLogout() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => api<void>('/auth/logout', { method: 'POST' }),
+    // Don't pause while offline: attempt it, and clear local data either way (onSettled).
+    networkMode: 'always',
     onSettled: () => {
       // Forget everything cached for this user (evacuee lists, donor phones...).
       queryClient.clear();
