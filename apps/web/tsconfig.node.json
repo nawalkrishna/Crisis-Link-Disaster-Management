@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  // Build/test config files run in Node, not the browser: they get Node's types (process...).
+  "include": ["vite.config.ts", "vitest.config.ts"]
+}

@@ -1,5 +1,7 @@
 import { prisma } from '../db';
 import { purgeExpiredIdempotencyKeys } from '../lib/idempotency';
+import { logger } from '../lib/logger';
+import { smsSent } from '../lib/metrics';
 import { maskPhone, smsProvider } from './provider';
 
 /**
@@ -61,6 +63,7 @@ async function deliver(msg: Claimed) {
         ...(msg.purpose === 'OTP' && { body: 'CrisisLink verification code (redacted)' }),
       },
     });
+    smsSent.inc({ result: 'sent' });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const permanent = smsProvider.isPermanentError?.(err) ?? false;
@@ -74,8 +77,10 @@ async function deliver(msg: Claimed) {
         nextAttemptAt: new Date(Date.now() + delayMs),
       },
     });
-    console.warn(
-      `[sms] ${giveUp ? 'gave up on' : 'will retry'} ${maskPhone(msg.to)} (attempt ${msg.attempts}): ${message}`,
+    smsSent.inc({ result: giveUp ? 'failed' : 'retry' });
+    logger.warn(
+      { to: maskPhone(msg.to), attempt: msg.attempts, giveUp },
+      `sms delivery failed: ${message}`,
     );
   }
 }
@@ -101,7 +106,7 @@ let running = false;
 let lastPurge = 0;
 
 export function startBackgroundWorker() {
-  console.log(`SMS worker started (provider: ${smsProvider.name})`);
+  logger.info(`SMS worker started (provider: ${smsProvider.name})`);
   timer = setInterval(() => {
     if (running) return; // previous pass still busy: don't overlap
     running = true;
@@ -113,7 +118,7 @@ export function startBackgroundWorker() {
           await purgeExpiredIdempotencyKeys();
         }
       } catch (err) {
-        console.error('[worker] pass failed:', err);
+        logger.error({ err }, 'background worker pass failed');
       } finally {
         running = false;
       }

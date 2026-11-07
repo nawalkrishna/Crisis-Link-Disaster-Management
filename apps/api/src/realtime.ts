@@ -1,6 +1,7 @@
 import type { Server as HttpServer } from 'node:http';
 import type { Request } from 'express';
 import { Server, type Socket } from 'socket.io';
+import { createAdapter } from '@socket.io/redis-adapter';
 import {
   LIVE_EVENT,
   type ClientToServerEvents,
@@ -8,6 +9,9 @@ import {
   type ServerToClientEvents,
 } from '@crisislink/shared';
 import { config } from './config';
+import { logger } from './lib/logger';
+import { socketConnections } from './lib/metrics';
+import { redis } from './lib/redis';
 import { isActive, isStaff } from './auth/policies';
 import { SESSION_COOKIE, findSession, loadAuthUser, type AuthUser } from './auth/session';
 
@@ -55,7 +59,7 @@ function roomsFor(user?: AuthUser) {
 }
 const ROLE_ROOMS = ['members', 'staff'];
 
-export function attachRealtime(server: HttpServer) {
+export async function attachRealtime(server: HttpServer) {
   io = new Server(server, {
     // Socket.IO's `cors` option only covers its HTTP long-polling fallback...
     cors: { origin: config.corsOrigins, credentials: true },
@@ -67,6 +71,16 @@ export function attachRealtime(server: HttpServer) {
     },
     serveClient: false,
   });
+
+  // Several API servers: the Redis adapter forwards every emit to the other servers, so a
+  // change saved on server A reaches a browser connected to server B.
+  if (redis) {
+    const pub = redis.duplicate();
+    const sub = redis.duplicate();
+    await Promise.all([pub.connect(), sub.connect()]);
+    io.adapter(createAdapter(pub, sub));
+    logger.info('socket.io using redis adapter');
+  }
 
   // Handshake middleware = login check. Runs once per connection, with the same session
   // lookup as HTTP requests. A bad/missing cookie is fine: you're just anonymous.
@@ -85,6 +99,8 @@ export function attachRealtime(server: HttpServer) {
   });
 
   io.on('connection', (socket: LiveSocket) => {
+    socketConnections.inc();
+    socket.on('disconnect', () => socketConnections.dec());
     const { user, sessionId } = socket.data;
     void socket.join(roomsFor(user));
     if (user) void socket.join(`user:${user.id}`);

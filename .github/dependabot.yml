@@ -1,0 +1,21 @@
+# Dependabot opens pull requests when dependencies have updates or security fixes.
+# CI then tests each one, so keeping up to date is a review-and-merge job, not a chore.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      # One PR for all minor/patch updates instead of dozens.
+      minor-and-patch:
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+  - package-ecosystem: docker
+    directories: [/apps/api, /apps/web]
+    schedule:
+      interval: monthly

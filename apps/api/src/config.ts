@@ -26,10 +26,19 @@ const envSchema = z
      * How SMS are sent. `console` prints them in the API terminal (development - no account or
      * cost needed). `twilio` sends real messages and needs the three TWILIO_* variables.
      */
-    SMS_PROVIDER: z.enum(['console', 'twilio']).default('console'),
+    SMS_PROVIDER: z.enum(['console', 'twilio', 'memory']).default('console'),
     TWILIO_ACCOUNT_SID: z.string().optional(),
     TWILIO_AUTH_TOKEN: z.string().optional(),
     TWILIO_FROM: z.string().optional(),
+    /** trace | debug | info | warn | error | fatal | silent. Defaults: silent in tests, info otherwise. */
+    LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']).optional(),
+    /** If set, GET /metrics requires `Authorization: Bearer <token>`. Required to expose metrics in production. */
+    METRICS_TOKEN: z.string().min(16).optional(),
+    /**
+     * Optional. With Redis, several API servers can run side by side: they share rate-limit
+     * counters and pass live-update events to each other's sockets.
+     */
+    REDIS_URL: z.url().optional(),
   })
   .refine(
     (env) =>
@@ -72,4 +81,8 @@ export const config = {
     },
   },
   isProduction: env.NODE_ENV === 'production',
+  isTest: env.NODE_ENV === 'test',
+  logLevel: env.LOG_LEVEL ?? (env.NODE_ENV === 'test' ? 'silent' : 'info'),
+  metricsToken: env.METRICS_TOKEN,
+  redisUrl: env.REDIS_URL,
 } as const;

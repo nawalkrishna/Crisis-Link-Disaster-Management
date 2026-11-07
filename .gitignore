@@ -25,3 +25,11 @@ Thumbs.db
 
 # Prisma generated client (re-created by `npm install` / `npm run db:generate`)
 apps/api/src/generated/
+
+# Test output
+test-results/
+playwright-report/
+coverage/
+
+# Local tool settings (Claude desktop preview)
+.claude/

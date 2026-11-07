@@ -1,8 +1,10 @@
 import type { RequestHandler } from 'express';
 import { rateLimit } from 'express-rate-limit';
+import { RedisStore } from 'rate-limit-redis';
 import type { ApiError } from '@crisislink/shared';
 import { config } from '../config';
 import { HttpError } from './http';
+import { redis } from './redis';
 
 /**
  * CSRF (Cross-Site Request Forgery) protection.
@@ -40,11 +42,22 @@ export const requireJsonBody: RequestHandler = (req, _res, next) => {
 
 /**
  * RATE LIMITING: slow down password guessing and spam.
- * The counters live in memory, which is fine for one server; with several servers
- * you'd move them to Redis (Phase 6).
+ * Counters live in memory on a single server, or in Redis when REDIS_URL is set, so that
+ * several servers share one count per IP (see lib/redis.ts).
  */
-function limiter(options: { windowMinutes: number; limit: number; onlyFailures?: boolean }) {
+function limiter(options: {
+  name: string;
+  windowMinutes: number;
+  limit: number;
+  onlyFailures?: boolean;
+}) {
   return rateLimit({
+    ...(redis && {
+      store: new RedisStore({
+        prefix: `rl:${options.name}:`,
+        sendCommand: (...args: string[]) => redis!.sendCommand(args),
+      }),
+    }),
     windowMs: options.windowMinutes * 60 * 1000,
     limit: options.limit,
     skipSuccessfulRequests: options.onlyFailures ?? false,
@@ -60,9 +73,16 @@ function limiter(options: { windowMinutes: number; limit: number; onlyFailures?:
 }
 
 /** 10 FAILED logins per 15 min per IP. Successful logins don't count. */
-export const loginLimiter = limiter({ windowMinutes: 15, limit: 10, onlyFailures: true });
+export const loginLimiter = limiter({
+  name: 'login',
+  windowMinutes: 15,
+  limit: 10,
+  onlyFailures: true,
+});
 /** Sign-ups and public reports: generous for real people, painful for bots. */
-export const registerLimiter = limiter({ windowMinutes: 60, limit: 10 });
-export const publicSubmitLimiter = limiter({ windowMinutes: 60, limit: 30 });
+export const registerLimiter = limiter({ name: 'register', windowMinutes: 60, limit: 10 });
+export const publicSubmitLimiter = limiter({ name: 'submit', windowMinutes: 60, limit: 30 });
 /** SMS cost money and reach real phones: keep sign-up attempts per IP low. */
-export const alertSignupLimiter = limiter({ windowMinutes: 60, limit: 20 });
+export const alertSignupLimiter = limiter({ name: 'alerts', windowMinutes: 60, limit: 20 });
+/** Checking codes gets its own budget (on top of the 5-guesses-per-code limit). */
+export const alertVerifyLimiter = limiter({ name: 'alerts-verify', windowMinutes: 60, limit: 30 });

@@ -4,6 +4,33 @@ import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import pkg from './package.json' with { type: 'json' };
 
+// Where /api and /socket.io are forwarded in dev/preview. End-to-end tests run their own API
+// on another port (see playwright.config.ts).
+const apiTarget = process.env.API_PROXY_TARGET ?? 'http://localhost:4000';
+const proxy = {
+  '/api': apiTarget,
+  // Live updates: `ws: true` forwards the WebSocket upgrade, not just plain HTTP.
+  '/socket.io': { target: apiTarget, ws: true },
+};
+
+/**
+ * Content Security Policy - the same one nginx sends in production (apps/web/nginx.conf; keep
+ * them in sync). `vite preview` sends it too, so the end-to-end tests run under the real policy
+ * and fail if something the app needs is blocked.
+ */
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: https://tile.openstreetmap.org",
+  "connect-src 'self'",
+  "worker-src 'self'",
+  "manifest-src 'self'",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join('; ');
+
 export default defineConfig({
   // The app version, available in code as __APP_VERSION__ (used to invalidate the offline cache).
   define: { __APP_VERSION__: JSON.stringify(pkg.version) },
@@ -79,18 +106,12 @@ export default defineConfig({
     port: 5173,
     // In development the browser calls /api/... on the Vite server, which forwards
     // it to the API. Same origin for the browser = no CORS headaches locally.
-    proxy: {
-      '/api': 'http://localhost:4000',
-      // Live updates: `ws: true` forwards the WebSocket upgrade, not just plain HTTP.
-      '/socket.io': { target: 'http://localhost:4000', ws: true },
-    },
+    proxy,
   },
   // `npm run preview` serves the production build (with the service worker) on :4173.
   preview: {
     port: 4173,
-    proxy: {
-      '/api': 'http://localhost:4000',
-      '/socket.io': { target: 'http://localhost:4000', ws: true },
-    },
+    proxy,
+    headers: { 'Content-Security-Policy': CSP },
   },
 });

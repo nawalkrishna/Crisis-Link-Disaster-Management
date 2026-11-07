@@ -12,7 +12,7 @@ import {
 import { prisma } from '../db';
 import { requireAdmin } from '../auth/policies';
 import { HttpError, notFound, parse } from '../lib/http';
-import { alertSignupLimiter } from '../lib/security';
+import { alertSignupLimiter, alertVerifyLimiter } from '../lib/security';
 import {
   OTP_MAX_ATTEMPTS,
   OTP_TTL_MS,
@@ -79,7 +79,7 @@ alertsRouter.post('/alerts/subscribe', alertSignupLimiter, async (req, res) => {
   res.status(202).json(body); // 202 Accepted: the SMS is queued, not yet delivered
 });
 
-alertsRouter.post('/alerts/verify', alertSignupLimiter, async (req, res) => {
+alertsRouter.post('/alerts/verify', alertVerifyLimiter, async (req, res) => {
   const { subscriptionId, code } = parse(verifyAlertsSchema, req.body);
 
   // Count the guess BEFORE checking it, atomically, so parallel guesses can't exceed the limit.

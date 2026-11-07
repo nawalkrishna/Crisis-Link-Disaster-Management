@@ -1,0 +1,93 @@
+# The whole CrisisLink stack in containers, production-style:
+#
+#   docker compose up --build        then open http://localhost:8080
+#
+#   web (nginx :8080) ──/api, /socket.io──► api (Node :4000) ──► db (PostgreSQL)
+#                                                └─────────────► redis (rate limits, live updates)
+#   migrate: runs once before the API starts, applying database migrations.
+#
+# Only the web container is reachable from your machine; the database and Redis are on the
+# private compose network. Secrets come from a `.env` file next to this one (git-ignored):
+#   POSTGRES_PASSWORD=pick-a-strong-password
+
+name: crisislink
+
+x-db-url: &db-url postgresql://crisislink:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/crisislink
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: crisislink
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: crisislink
+    volumes:
+      - db-data:/var/lib/postgresql/data # data survives `docker compose down`
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U crisislink -d crisislink']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: migrate
+    environment:
+      DATABASE_URL: *db-url
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: runtime
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: *db-url
+      REDIS_URL: redis://redis:6379
+      CORS_ORIGINS: ${PUBLIC_WEB_URL:-http://localhost:8080}
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-http://localhost:8080}
+      TRUST_PROXY: 1 # nginx sits in front: use its X-Forwarded-For for client IPs
+      SMS_PROVIDER: ${SMS_PROVIDER:-console}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM: ${TWILIO_FROM:-}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    # To try horizontal scaling: `docker compose up --scale api=3` - nginx spreads requests
+    # across them, Redis keeps rate limits and live updates consistent.
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - '8080:8080'
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  db-data:

@@ -61,7 +61,7 @@ const PUBLIC_ROOTS = new Set([
 const hasPersonalFields = (data: unknown) =>
   JSON.stringify(data ?? null).includes('"reporterPhone"');
 
-const shouldPersistQuery = (query: Query) =>
+export const shouldPersistQuery = (query: Query) =>
   query.state.status === 'success' &&
   PUBLIC_ROOTS.has(String(query.queryKey[0])) &&
   !hasPersonalFields(query.state.data);

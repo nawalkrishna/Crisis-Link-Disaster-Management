@@ -68,6 +68,8 @@ server run `npm run make-admin -- you@example.com`.
 | `npm run lint`                       | ESLint across the whole repo (`lint:fix` to auto-fix)     |
 | `npm run format`                     | Prettier formats every file (`format:check` only reports) |
 | `npm run check`                      | format check + lint + typecheck — run before committing   |
+| `npm test`                           | Unit + API tests (Vitest) on a separate `_test` database  |
+| `npm run test:e2e`                   | Browser tests (Playwright) on a separate `_e2e` database  |
 | `npm run db:migrate`                 | Create a migration from schema changes and apply it       |
 | `npm run db:seed`                    | Insert districts and (in development) sample data         |
 | `npm run db:reset`                   | Drop everything, re-run all migrations (dev only!)        |
@@ -75,6 +77,66 @@ server run `npm run make-admin -- you@example.com`.
 | `npm run make-admin -- <email>`      | Promote a registered user to an active admin              |
 | `npm run dev -w @crisislink/api`     | Run a script in just one workspace                        |
 | `npm run preview -w @crisislink/web` | Serve the production build (with service worker) on :4173 |
+
+## Testing
+
+| Layer           | Tool                                 | Where                      | What it proves                                                                               |
+| --------------- | ------------------------------------ | -------------------------- | -------------------------------------------------------------------------------------------- |
+| Unit            | Vitest                               | `packages/shared/test`     | Validation rules, distance maths                                                             |
+| Component       | Vitest + Testing Library (JSDOM)     | `apps/web/src/**/*.test.*` | Accessible forms, offline privacy rules                                                      |
+| API/integration | Vitest + Supertest + real PostgreSQL | `apps/api/test`            | Permissions, race conditions, idempotency, SMS outbox, live-update rooms, multi-server Redis |
+| End-to-end      | Playwright (real Chrome)             | `e2e/`                     | Whole flows in a browser: maps, check-in with live update, offline queueing, phone layout    |
+
+- **Your data is never touched**: API tests use `<your db>_test`, browser tests `<your db>_e2e`.
+  Both are created and migrated automatically (the role needs `CREATEDB`, as in Quick start).
+- `npm run test:e2e` builds the web app and starts its own API (:4100) and preview server (:4174),
+  so it can run while `npm run dev` is running. Locally it uses your installed Chrome.
+- The Redis tests run only when `TEST_REDIS_URL` is set (CI sets it).
+- After a failed browser test: `npx playwright show-report` shows screenshots and a step-by-step
+  trace.
+
+## Running with Docker
+
+Install Docker Desktop, then from the repo root:
+
+```bash
+echo "POSTGRES_PASSWORD=pick-a-strong-password" > .env
+docker compose up --build
+```
+
+Open http://localhost:8080. This runs the production setup: nginx (static app + proxy), the API,
+PostgreSQL, Redis, and a one-off `migrate` container that applies migrations before the API
+starts. Try `docker compose up --scale api=3` to run three API servers behind nginx. A fresh
+Docker database has districts but no sample data (`docker compose run --rm migrate npx prisma db
+seed` with `DEV_SEED_PASSWORD` set adds it).
+
+## CI/CD and deployment
+
+`.github/workflows/ci.yml` runs on every push and pull request: format/lint/types, unit + API
+tests (with real PostgreSQL and Redis), and the Playwright tests. When all pass on `main`, it
+publishes three images to GitHub Container Registry:
+
+| Image                                     | Run it as                                         |
+| ----------------------------------------- | ------------------------------------------------- |
+| `ghcr.io/nawalkrishna/crisislink-migrate` | Release / pre-deploy command (applies migrations) |
+| `ghcr.io/nawalkrishna/crisislink-api`     | Web service on port 4000 (health: `/api/health`)  |
+| `ghcr.io/nawalkrishna/crisislink-web`     | Web service on port 8080, proxies to `api:4000`   |
+
+To deploy anywhere that runs containers: create a managed PostgreSQL (and optionally Redis), set
+the API's environment from `apps/api/.env.example` (`NODE_ENV=production`, `DATABASE_URL`,
+`CORS_ORIGINS` and `PUBLIC_WEB_URL` = your public URL, `TRUST_PROXY=1`, `METRICS_TOKEN`, SMS
+settings), run the migrate image, then start the API and web images. Dependabot keeps
+dependencies and base images up to date with weekly pull requests.
+
+## Monitoring
+
+- **Logs**: one JSON line per request (`pino`), with `X-Request-Id` in every response — give a user's
+  error report the id and find the exact log lines. Cookies and passwords are redacted.
+- **Health**: `/api/health/live` (process alive, for restarts) and `/api/health` (database
+  reachable, for load balancers).
+- **Metrics**: `GET /metrics` in Prometheus format (request rate/latency per route, open sockets,
+  SMS queue by status, Node memory and event-loop lag). Requires
+  `Authorization: Bearer $METRICS_TOKEN` when set; off in production without it.
 
 ## API
 
@@ -146,6 +208,7 @@ crisislink/
 ├── apps/
 │   ├── api/          Express 5 + TypeScript REST API (dev: node --watch + tsx, build: tsup)
 │   │   ├── prisma/       schema.prisma, migrations/, seed.ts
+│   │   ├── test/         API tests (Vitest + Supertest)
 │   │   └── src/          app.ts, realtime.ts (Socket.IO), routes/, auth/ (sessions,
 │   │                     policies), sms/ (provider, outbox worker), lib/, scripts/, db.ts
 │   └── web/          React 19 + Vite + Tailwind CSS v4
@@ -155,6 +218,9 @@ crisislink/
 │                         auth, volunteer, manage, admin)
 ├── packages/
 │   └── shared/       Types & constants imported by BOTH api and web
+├── e2e/              Playwright browser tests
+├── .github/          CI workflow, Dependabot
+├── docker-compose.yml   the full stack in containers
 ├── tsconfig.base.json   strict TypeScript settings every workspace extends
 ├── eslint.config.js     one lint config for the whole repo
 └── package.json         npm workspaces + root scripts
@@ -325,6 +391,36 @@ crisislink/
   development and a Twilio adapter (plain `fetch`, no SDK) for production. Real SMS in India also
   needs TRAI DLT registration of the sender ID and message templates.
 
+## Concepts introduced in Phase 6
+
+- **The testing pyramid** — many fast unit tests, fewer API tests against a real database, a
+  handful of slow browser tests. Each layer catches what the one below can't.
+- **Testing against a real database** — no mocks for PostgreSQL: row locks, unique indexes and
+  transactions are exactly what we need to prove. Each test file starts from a truncated database.
+- **Testing concurrency** — `Promise.all` fires 10 check-ins or 5 claims at once to prove the
+  locks hold. Tests also caught two real bugs: retry times computed in the server's time zone
+  (fixed by making every database session UTC) and an nginx header-inheritance trap.
+- **Test isolation & test doubles** — a `memory` SMS provider records messages and can simulate
+  outages; `vi.resetModules()` loads two independent copies of the API to simulate two servers.
+- **Accessible queries in UI tests** — Testing Library finds elements by label and role, the way
+  a screen reader does, so passing tests mean the accessibility wiring is real.
+- **Containers & multi-stage builds** — dev tools stay in build stages; the runtime image has only
+  Node, production dependencies and the bundle, and runs as a non-root user. Layer caching makes
+  rebuilds fast.
+- **docker compose** — the whole system declared in one file: dependency order with health checks,
+  a one-off migration job, a private network, a persistent volume.
+- **Reverse proxy** — nginx serves static files with the right caching (hashed assets forever,
+  `index.html` and the service worker never) and forwards `/api` and WebSocket upgrades.
+- **Content Security Policy** — the browser refuses scripts and connections not on an allow-list;
+  the e2e tests run under the same policy and fail on any violation.
+- **Horizontal scaling** — state lives in PostgreSQL; Redis shares rate-limit counters and
+  Socket.IO events between servers.
+- **CI/CD** — GitHub Actions with throwaway service containers, least-privilege permissions,
+  cancelled duplicate runs, failure artifacts, and images published only from `main`.
+- **Observability** — structured logs with request ids, liveness vs readiness checks, Prometheus
+  metrics (histograms, low-cardinality labels), graceful shutdown on `SIGTERM`.
+- **Supply-chain hygiene** — Dependabot updates, lockfile-exact installs (`npm ci`).
+
 ## Roadmap
 
 - [x] **Phase 0** — Foundations: git, TypeScript monorepo, lint/format, API + web skeleton
@@ -337,5 +433,5 @@ crisislink/
 - [x] **Phase 4** — Real-time updates (Socket.IO), maps (Leaflet), nearest camp with space
 - [x] **Phase 5** — Offline-first PWA (service worker, persisted cache, outbox, idempotency),
       SMS alerts (double opt-in, transactional outbox, retrying worker)
-- [ ] **Phase 6** — Tests (Vitest, Playwright), Docker, CI/CD, deployment, monitoring
+- [x] **Phase 6** — Tests (Vitest, Playwright), Docker, CI/CD, monitoring (deploy-ready images)
 - [ ] **Phase 7** — AI report triage, Malayalam i18n, analytics

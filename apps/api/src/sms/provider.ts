@@ -1,4 +1,5 @@
 import { config } from '../config';
+import { logger } from '../lib/logger';
 
 /**
  * SMS PROVIDERS behind one small interface, so the rest of the code doesn't care who
@@ -22,8 +23,25 @@ export class PermanentSmsError extends Error {}
 const consoleProvider: SmsProvider = {
   name: 'console',
   async send(to, body) {
-    console.log(`\n[sms -> ${to}]\n${body}\n`);
+    logger.info({ to: maskPhone(to) }, `[sms] ${body}`);
     return { providerId: `console-${Date.now()}` };
+  },
+};
+
+/**
+ * Tests: keep messages in memory so a test can read the code it was "sent", and make the
+ * next N sends fail to exercise the retry logic.
+ */
+export const memoryOutbox = { sent: [] as { to: string; body: string }[], failNext: 0 };
+const memoryProvider: SmsProvider = {
+  name: 'memory',
+  async send(to, body) {
+    if (memoryOutbox.failNext > 0) {
+      memoryOutbox.failNext--;
+      throw new Error('Simulated provider outage');
+    }
+    memoryOutbox.sent.push({ to, body });
+    return { providerId: `memory-${memoryOutbox.sent.length}` };
   },
 };
 
@@ -57,8 +75,11 @@ const twilioProvider: SmsProvider = {
   isPermanentError: (err) => err instanceof PermanentSmsError,
 };
 
-export const smsProvider: SmsProvider =
-  config.sms.provider === 'twilio' ? twilioProvider : consoleProvider;
+export const smsProvider: SmsProvider = {
+  console: consoleProvider,
+  twilio: twilioProvider,
+  memory: memoryProvider,
+}[config.sms.provider];
 
 /** "9400000001" or "+919400000001" -> "+919400000001" (E.164, what SMS gateways expect). */
 export const toE164 = (indianMobile: string) => `+91${indianMobile.replace(/^\+91/, '')}`;

@@ -1,0 +1,16 @@
+# Keep the Docker build context small and secret-free: only source goes in, never
+# node_modules (rebuilt for Linux inside the image), build output, or .env files.
+**/node_modules
+**/dist
+**/dev-dist
+**/.env
+**/.env.*
+!**/.env.example
+apps/api/src/generated
+.git
+.github
+.vscode
+test-results
+playwright-report
+coverage
+*.log

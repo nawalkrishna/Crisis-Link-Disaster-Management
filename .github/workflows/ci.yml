@@ -1,0 +1,145 @@
+# CONTINUOUS INTEGRATION: every push and pull request is checked automatically on a fresh
+# Linux machine. Nothing reaches `main` with failing tests "because it worked on my laptop".
+# CONTINUOUS DELIVERY: when everything passes on `main`, Docker images are built and published
+# to GitHub Container Registry, ready for any host to deploy.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch cancels the older, now pointless, run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: jobs can only read the repo unless they ask for more.
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Format, lint, types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+
+  test:
+    name: Unit & API tests
+    runs-on: ubuntu-latest
+    # Throwaway databases for this run only ("service containers").
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/crisislink_test
+      TEST_REDIS_URL: redis://localhost:6379 # enables the multi-server tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  e2e:
+    name: End-to-end (Playwright)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 3s
+          --health-retries 10
+    env:
+      E2E_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/crisislink_e2e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      # On failure, keep the HTML report with screenshots and step-by-step traces.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  docker:
+    name: Docker images
+    needs: [check, test, e2e]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # publish to ghcr.io (only on main)
+    strategy:
+      matrix:
+        include:
+          - image: crisislink-api
+            dockerfile: apps/api/Dockerfile
+            target: runtime
+          - image: crisislink-migrate
+            dockerfile: apps/api/Dockerfile
+            target: migrate
+          - image: crisislink-web
+            dockerfile: apps/web/Dockerfile
+            target: runtime
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Tags: the commit SHA (exact, for rollbacks) and `latest`.
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+          tags: |
+            type=sha,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          # Pull requests only prove the image builds; pushes to main publish it.
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}

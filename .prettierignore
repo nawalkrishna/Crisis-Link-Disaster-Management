@@ -3,3 +3,6 @@ dist
 coverage
 package-lock.json
 apps/api/src/generated
+.claude
+test-results
+playwright-report

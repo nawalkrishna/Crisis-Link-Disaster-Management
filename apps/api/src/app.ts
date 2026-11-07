@@ -7,6 +7,8 @@ import { config } from './config';
 import { prisma } from './db';
 import { loadSession } from './auth/session';
 import { errorHandler, notFoundHandler } from './lib/errors';
+import { httpLogger } from './lib/logger';
+import { metricsHandler, metricsMiddleware } from './lib/metrics';
 import { requireJsonBody, verifyOrigin } from './lib/security';
 import { alertsRouter } from './routes/alerts';
 import { authRouter } from './routes/auth';
@@ -20,7 +22,7 @@ import { overviewRouter } from './routes/overview';
 import { tasksRouter } from './routes/tasks';
 import { usersRouter } from './routes/users';
 
-const VERSION = '0.5.0';
+const VERSION = '0.6.0';
 
 /**
  * Builds the Express app WITHOUT starting a server.
@@ -33,6 +35,8 @@ export function createApp() {
   app.disable('x-powered-by');
   // Behind a hosting proxy, trust its X-Forwarded-For so req.ip (used by rate limits) is the real client.
   app.set('trust proxy', config.trustProxy);
+  app.use(httpLogger); // one structured log line per request, with an X-Request-Id
+  app.use(metricsMiddleware); // request counts + durations for /metrics
   app.use(helmet()); // sensible security headers
   // Only our frontend may call us from a browser; `credentials` allows the session cookie.
   app.use(cors({ origin: config.corsOrigins, credentials: true }));
@@ -43,6 +47,12 @@ export function createApp() {
   app.use(loadSession); // sets req.user when a valid session cookie is present
 
   const api = Router();
+
+  // LIVENESS: "is the process running?" - no database call, so a slow database doesn't make
+  // the orchestrator kill healthy containers. /health (below) is READINESS: "can it serve?"
+  api.get('/health/live', (_req, res) => {
+    res.json({ status: 'ok' });
+  });
 
   api.get('/health', async (_req, res) => {
     // A health check that also proves the database is reachable.
@@ -74,6 +84,7 @@ export function createApp() {
   api.use(alertsRouter);
 
   app.use('/api', api);
+  app.get('/metrics', metricsHandler);
   app.use(notFoundHandler);
   app.use(errorHandler);
 

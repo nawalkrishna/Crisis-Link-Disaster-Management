@@ -17,7 +17,7 @@ export const notFoundHandler: RequestHandler = (req, res) => {
  * One place that turns every kind of error into a consistent JSON response.
  * Express recognises error handlers by their 4 parameters, so `_next` must stay.
  */
-export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   // Our own errors: already know their status.
   if (err instanceof HttpError) {
     return send(res, err.status, { code: err.code, message: err.message });
@@ -59,7 +59,8 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     });
   }
 
-  console.error(err);
+  // Unexpected: log it with the request id so it can be found from the user's report.
+  req.log.error({ err }, 'unhandled error');
   // Never leak internals (stack traces, SQL) to clients in production.
   send(res, 500, {
     code: 'INTERNAL_ERROR',
