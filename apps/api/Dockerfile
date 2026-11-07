@@ -42,6 +42,9 @@ COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 # --ignore-scripts: skip `prisma generate` (the generated client is already bundled in dist).
 RUN npm ci --omit=dev --ignore-scripts --workspace @crisislink/api --include-workspace-root=false
+# npm hoists most packages to /app/node_modules; apps/api/node_modules only exists when two
+# versions of a package conflict. Create it so the COPY below works either way.
+RUN mkdir -p apps/api/node_modules
 
 # ---- 4. runtime: what actually runs in production -----------------------------------------
 FROM node:${NODE_VERSION}-slim AS runtime

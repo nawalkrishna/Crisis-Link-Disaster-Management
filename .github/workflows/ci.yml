@@ -103,6 +103,7 @@ jobs:
       contents: read
       packages: write # publish to ghcr.io (only on main)
     strategy:
+      fail-fast: false # one broken image shouldn't hide whether the others build
       matrix:
         include:
           - image: crisislink-api
